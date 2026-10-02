@@ -130,6 +130,71 @@ const paths: Record<string, ReactElement> = {
   ),
   language: <path d="M3.5 5.5h9M8 3.5v2c0 4-2 7-4.5 8.5M5.5 9.5c1.2 2 3 3.5 5.5 4.3M12.5 20.5l4-10 4 10M14 17h5" />,
   motion: <path d="M3 12h4l2.5-6 5 12 2.5-6h4" />,
+  accessibility: (
+    <>
+      <circle cx="12" cy="4.8" r="1.8" />
+      <path d="M4.5 8.5c2.5.8 5 1.2 7.5 1.2s5-.4 7.5-1.2M12 9.7v4.5M12 14.2l-3 6.3M12 14.2l3 6.3" />
+    </>
+  ),
+  monitor: (
+    <>
+      <rect x="2.5" y="4" width="19" height="12.5" rx="1.8" />
+      <path d="M8.5 20.5h7M12 16.5v4" />
+    </>
+  ),
+  wifi: <path d="M2.8 9.2a13.5 13.5 0 0 1 18.4 0M5.8 12.4a9 9 0 0 1 12.4 0M8.8 15.6a4.6 4.6 0 0 1 6.4 0M12 19.2v.1" />,
+  storage: (
+    <>
+      <rect x="3" y="4" width="18" height="7" rx="1.8" />
+      <rect x="3" y="13" width="18" height="7" rx="1.8" />
+      <path d="M7 7.5h.1M7 16.5h.1M11 7.5h6M11 16.5h6" />
+    </>
+  ),
+  chip: (
+    <>
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+      <rect x="9.5" y="9.5" width="5" height="5" rx="1" />
+      <path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" />
+    </>
+  ),
+  keyboard: (
+    <>
+      <rect x="2.5" y="6" width="19" height="12" rx="2" />
+      <path d="M6 9.5h.1M9 9.5h.1M12 9.5h.1M15 9.5h.1M18 9.5h.1M6 12.5h.1M9 12.5h.1M12 12.5h.1M15 12.5h.1M18 12.5h.1M8 15.5h8" />
+    </>
+  ),
+  backspace: <path d="M8.5 5.5H20a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H8.5L2.5 12zM11.5 9.5l5 5M16.5 9.5l-5 5" />,
+  space: <path d="M4 10.5v3.5h16v-3.5" />,
+  switcher: (
+    <>
+      <rect x="3" y="7" width="12" height="12" rx="2" />
+      <path d="M7 4h12a2 2 0 0 1 2 2v10" />
+    </>
+  ),
+  share: <path d="M12 3.5v11M7.5 8 12 3.5 16.5 8M5.5 12.5v6a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-6" />,
+  link: <path d="M10 14a4 4 0 0 0 5.7 0l3.2-3.2a4 4 0 0 0-5.7-5.7L11.8 6.5M14 10a4 4 0 0 0-5.7 0l-3.2 3.2a4 4 0 0 0 5.7 5.7l1.4-1.4" />,
+  battery: (
+    <>
+      <rect x="2.5" y="7.5" width="17" height="9" rx="2" />
+      <path d="M21.5 10.5v3" />
+    </>
+  ),
+  pause: <path d="M8 5.5v13M16 5.5v13" strokeWidth="2.6" />,
+  next: <path d="M6 5.5v13l9-6.5zM18 5.5v13" />,
+  prev: <path d="M18 5.5v13l-9-6.5zM6 5.5v13" />,
+  info: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 11v5.5M12 7.8v.1" />
+    </>
+  ),
+  camera: (
+    <>
+      <path d="M4 7.5h3l1.8-2.5h6.4L17 7.5h3a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 18V9A1.5 1.5 0 0 1 4 7.5z" />
+      <circle cx="12" cy="13" r="3.6" />
+    </>
+  ),
+  fullscreen: <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" />,
 };
 
 export type IconName = keyof typeof paths;

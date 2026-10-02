@@ -186,7 +186,7 @@ export function UserSelect({ onPick }: { onPick: (who: Who) => void }) {
           </button>
         ))}
       </div>
-      <Hints back={false} />
+      <Hints back={false} cc={false} />
     </div>
   );
 }

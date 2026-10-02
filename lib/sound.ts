@@ -8,9 +8,18 @@ class SoundEngine {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private wet: GainNode | null = null;
-  private ambientNodes: { stop: () => void } | null = null;
+  private pad: { stop: (fade?: number) => void } | null = null;
+  private padKey = "";
+  private themeTimer: ReturnType<typeof setTimeout> | null = null;
   sfx = true;
   music = false;
+  /** 0..1, applied to everything through the master bus. */
+  volume = 0.8;
+  /** Index into `tracks` for the system (non-game) music. */
+  track = 0;
+  /** Seed of the game whose theme is playing, or null for the system track. */
+  theme: string | null = null;
+  private listeners = new Set<() => void>();
 
   private ensure(): AudioContext | null {
     if (typeof window === "undefined") return null;
@@ -19,7 +28,7 @@ class SoundEngine {
       if (!Ctx) return null;
       const ctx = new Ctx();
       const master = ctx.createGain();
-      master.gain.value = 0.7;
+      master.gain.value = 0.85 * this.volume;
       master.connect(ctx.destination);
       // Small generated room: noise with an exponential tail.
       const verb = ctx.createConvolver();
@@ -170,37 +179,89 @@ class SoundEngine {
     this.play([{ type: "triangle", freq: 220, to: 180, dur: 0.18, gain: 0.05 }], { wet: 0.2 });
   }
 
-  /** Quiet generative pad for the home screen. */
+  setVolume(v: number) {
+    this.volume = Math.max(0, Math.min(1, v));
+    if (this.ctx && this.master) this.master.gain.setTargetAtTime(0.85 * this.volume, this.ctx.currentTime, 0.05);
+  }
+
+  /** Subscribe to music changes (track / theme / on-off) so the UI can show what's playing. */
+  subscribe(fn: () => void) {
+    this.listeners.add(fn);
+    return () => {
+      this.listeners.delete(fn);
+    };
+  }
+  private emit() {
+    this.listeners.forEach((fn) => fn());
+  }
+
+  /** Quiet generative pad: the system music, or a game's theme while its tile is focused. */
   setMusic(on: boolean) {
+    if (this.music === on && (on ? this.pad : !this.pad)) return;
     this.music = on;
     if (!on) {
-      this.ambientNodes?.stop();
-      this.ambientNodes = null;
-      return;
-    }
+      this.pad?.stop(1.2);
+      this.pad = null;
+      this.padKey = "";
+    } else this.refreshPad();
+    this.emit();
+  }
+
+  nextTrack(dir: 1 | -1 = 1) {
+    this.setTrack((this.track + dir + tracks.length) % tracks.length);
+  }
+
+  setTrack(i: number) {
+    this.track = i;
+    this.theme = null;
+    if (this.themeTimer) clearTimeout(this.themeTimer);
+    if (this.music) this.refreshPad();
+    this.emit();
+  }
+
+  /** Play a game's theme (derived from its id) instead of the system track; null goes back. Debounced for fast scrolling. */
+  setTheme(seed: string | null) {
+    if (this.theme === seed) return;
+    if (this.themeTimer) clearTimeout(this.themeTimer);
+    this.themeTimer = setTimeout(() => {
+      this.theme = seed;
+      if (this.music) this.refreshPad();
+      this.emit();
+    }, 420);
+  }
+
+  private refreshPad() {
+    const voicing = this.theme ? themeVoicing(this.theme) : tracks[this.track].notes;
+    const key = this.theme ? `t:${this.theme}` : `s:${this.track}`;
+    if (this.pad && key === this.padKey) return;
     const ctx = this.ensure();
-    if (!ctx || !this.master || !this.wet || this.ambientNodes) return;
+    if (!ctx || !this.master || !this.wet) return;
+    this.pad?.stop(2.2);
+    this.padKey = key;
+    this.pad = this.startPad(ctx, voicing, this.theme ? hash(this.theme) : this.track);
+  }
+
+  private startPad(ctx: AudioContext, notes: number[], seed: number) {
     const now = ctx.currentTime;
     const out = ctx.createGain();
     out.gain.setValueAtTime(0.0001, now);
-    out.gain.exponentialRampToValueAtTime(0.05, now + 4);
+    out.gain.exponentialRampToValueAtTime(0.05, now + 3);
     const filter = ctx.createBiquadFilter();
     filter.type = "lowpass";
-    filter.frequency.value = 900;
+    filter.frequency.value = 820 + (seed % 5) * 90;
     filter.Q.value = 0.6;
     const lfo = ctx.createOscillator();
-    lfo.frequency.value = 0.05;
+    lfo.frequency.value = 0.04 + (seed % 7) * 0.006;
     const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 500;
+    lfoGain.gain.value = 480;
     lfo.connect(lfoGain).connect(filter.frequency);
     filter.connect(out);
-    out.connect(this.master);
+    out.connect(this.master!);
     const send = ctx.createGain();
     send.gain.value = 1.2;
-    out.connect(send).connect(this.wet);
+    out.connect(send).connect(this.wet!);
     const oscs: OscillatorNode[] = [lfo];
-    // Dmaj9 voicing, slowly breathing.
-    [73.42, 146.83, 220, 277.18, 329.63, 440].forEach((f, i) => {
+    notes.forEach((f, i) => {
       const o = ctx.createOscillator();
       o.type = i % 2 ? "triangle" : "sine";
       o.frequency.value = f;
@@ -217,17 +278,64 @@ class SoundEngine {
       trem.start();
       oscs.push(o, trem);
     });
+    // A slow, sparse bell melody on top so the pad doesn't feel static.
+    const bells = window.setInterval(() => {
+      if (!this.music || document.hidden) return;
+      const t = ctx.currentTime;
+      const f = notes[2 + Math.floor(Math.random() * (notes.length - 2))] * (Math.random() < 0.5 ? 2 : 4);
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.012, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 2.4);
+      o.connect(g).connect(out);
+      o.start(t);
+      o.stop(t + 2.5);
+    }, 2600 + (seed % 4) * 700);
     lfo.start();
-    this.ambientNodes = {
-      stop: () => {
+    return {
+      stop: (fade = 1.2) => {
+        clearInterval(bells);
         const t = ctx.currentTime;
         out.gain.cancelScheduledValues(t);
-        out.gain.setValueAtTime(out.gain.value, t);
-        out.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
-        oscs.forEach((o) => o.stop(t + 1.3));
+        out.gain.setValueAtTime(Math.max(out.gain.value, 0.0001), t);
+        out.gain.exponentialRampToValueAtTime(0.0001, t + fade);
+        oscs.forEach((o) => o.stop(t + fade + 0.1));
       },
     };
   }
+}
+
+function hash(s: string) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+const semis = (root: number, steps: number[]) => steps.map((s) => root * Math.pow(2, s / 12));
+
+/** System music: a few slow chords, each a "track" in the music card. */
+export const tracks: { name: { tr: string; en: string }; notes: number[] }[] = [
+  { name: { tr: "Kozmik sürüklenme", en: "Cosmic drift" }, notes: semis(73.42, [0, 12, 19, 23, 26, 31]) },
+  { name: { tr: "Kuzey ışıkları", en: "Northern lights" }, notes: semis(87.31, [0, 12, 16, 23, 30, 35]) },
+  { name: { tr: "Gece vardiyası", en: "Night shift" }, notes: semis(110, [0, 12, 15, 19, 26, 31]) },
+  { name: { tr: "Kor", en: "Ember" }, notes: semis(77.78, [0, 12, 19, 26, 28, 35]) },
+];
+
+/** A game's theme: root and chord quality picked from its id, so each project always sounds the same. */
+function themeVoicing(seed: string) {
+  const h = hash(seed);
+  const roots = [65.41, 69.3, 73.42, 77.78, 82.41, 87.31, 92.5, 98, 103.83, 110];
+  const shapes = [
+    [0, 12, 19, 23, 26, 31],
+    [0, 12, 15, 19, 26, 31],
+    [0, 12, 16, 23, 30, 35],
+    [0, 7, 14, 19, 22, 27],
+    [0, 12, 17, 24, 26, 31],
+  ];
+  return semis(roots[h % roots.length], shapes[(h >>> 4) % shapes.length]);
 }
 
 export const sound = new SoundEngine();
