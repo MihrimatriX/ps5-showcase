@@ -58,7 +58,7 @@ export function Glyph({ kind }: { kind: "cross" | "circle" | "home" }) {
   );
 }
 
-export function Hints({ back = true, select = true, extra }: { back?: boolean; select?: boolean; extra?: string }) {
+export function Hints({ back = true, select = true, cc = true, extra }: { back?: boolean; select?: boolean; cc?: boolean; extra?: string }) {
   const { t } = useConsole();
   return (
     <div className="hints">
@@ -76,11 +76,13 @@ export function Hints({ back = true, select = true, extra }: { back?: boolean; s
           <kbd>Esc</kbd>
         </span>
       )}
-      <span>
-        <Glyph kind="home" />
-        {t("hint.cc")}
-        <kbd>P</kbd>
-      </span>
+      {cc && (
+        <span>
+          <Glyph kind="home" />
+          {t("hint.cc")}
+          <kbd>P</kbd>
+        </span>
+      )}
     </div>
   );
 }

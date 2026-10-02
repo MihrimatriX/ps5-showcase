@@ -54,9 +54,10 @@ function PageShell({
   );
 }
 
-function usePageInput(grid: ReturnType<typeof useGrid>, onNav: (n: PageNav) => void, activate: (p: Pos) => void, enabled = true) {
+function usePageInput(grid: ReturnType<typeof useGrid>, onNav: (n: PageNav) => void, activate: (p: Pos) => void, enabled = true, extra?: (a: Action) => boolean) {
   useLayer((a: Action) => {
     if (a === "home") return onNav({ to: "cc" });
+    if (extra?.(a)) return;
     if (a === "back") {
       sound.back();
       return onNav({ to: "back" });
@@ -578,7 +579,16 @@ export function LibraryPage({ onNav }: { onNav: (n: PageNav) => void }) {
       if (p) onNav({ to: "game", project: p });
     }
   };
-  usePageInput(grid, onNav, activate);
+  // L1 / R1 step through the filters from anywhere on the page.
+  usePageInput(grid, onNav, activate, true, (a) => {
+    if (a !== "l1" && a !== "r1") return false;
+    const n = filters.indexOf(filter) + (a === "l1" ? -1 : 1);
+    if (n < 0 || n >= filters.length) return true;
+    sound.move();
+    setFilter(filters[n]);
+    grid.setPos({ r: 0, c: n });
+    return true;
+  });
   const np = (r: number, c: number) => navProps(grid.pos, r, c, grid.focus, () => activate({ r, c }));
 
   return (

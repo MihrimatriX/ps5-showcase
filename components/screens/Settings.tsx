@@ -28,7 +28,7 @@ type Net = { state: "idle" | "running" | "done"; ms?: number | null; online?: bo
 
 export const APP_VERSION = "2.0.0";
 
-export function SettingsApp({ onExit, onSwitchUser }: { onExit: () => void; onSwitchUser: () => void }) {
+export function SettingsApp({ onExit, onSwitchUser, onCC }: { onExit: () => void; onSwitchUser: () => void; onCC: () => void }) {
   const c = useConsole();
   const { lang, t } = c;
   const notes = useNotifications();
@@ -415,7 +415,7 @@ export function SettingsApp({ onExit, onSwitchUser }: { onExit: () => void; onSw
   useLayer(
     (a) => {
       setLastAction({ a, at: performance.now() });
-      if (a === "home") return;
+      if (a === "home") return onCC();
       if (!category) {
         if (a === "up" && catIdx > 0) (sound.move(), setCatIdx(catIdx - 1));
         else if (a === "down" && catIdx < categories.length - 1) (sound.move(), setCatIdx(catIdx + 1));

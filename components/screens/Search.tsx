@@ -24,7 +24,17 @@ const letters = {
 };
 type Key = { id: string; label: string; ch?: string; icon?: string; wide?: number };
 
-export function SearchScreen({ onExit, onProject, onLink }: { onExit: () => void; onProject: (p: Project) => void; onLink: (url: string, title: string, sample?: boolean) => void }) {
+export function SearchScreen({
+  onExit,
+  onProject,
+  onLink,
+  onCC,
+}: {
+  onExit: () => void;
+  onProject: (p: Project) => void;
+  onLink: (url: string, title: string, sample?: boolean) => void;
+  onCC: () => void;
+}) {
   const { t, lang, opened } = useConsole();
   const x = (tr: string, en: string) => (lang === "tr" ? tr : en);
   const [q, setQ] = useState("");
@@ -137,7 +147,7 @@ export function SearchScreen({ onExit, onProject, onLink }: { onExit: () => void
 
   useLayer(
     (a) => {
-      if (a === "home") return;
+      if (a === "home") return onCC();
       const wasTyping = typed.current;
       typed.current = false;
       if (a === "confirm" && wasTyping && zone === "kb") return pressKey(keys[keys.length - 1][3]);

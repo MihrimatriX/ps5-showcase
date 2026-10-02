@@ -3691,7 +3691,7 @@ p {
 .search-results {
   position: absolute;
   top: calc(var(--u) * 7.6);
-  bottom: calc(var(--u) * 28);
+  bottom: calc(var(--u) * 29.2);
   left: 0;
   right: 0;
   overflow-y: auto;
@@ -3827,7 +3827,7 @@ p {
 .osk {
   position: absolute;
   left: 50%;
-  bottom: calc(var(--u) * 5.2);
+  bottom: calc(var(--u) * 6.4);
   transform: translateX(-50%);
   width: min(calc(var(--u) * 72), calc(100% - 32px));
   display: grid;

@@ -222,6 +222,11 @@ function Console() {
     }
   };
 
+  const openCC = () => {
+    sound.select();
+    setCc({});
+  };
+
   const current = screen.name === "game" ? screen.project : null;
   const showHomeButton = !systemScreens.includes(screen.name) && !cc;
 
@@ -277,6 +282,7 @@ function Console() {
       view = (
         <SettingsApp
           onExit={back}
+          onCC={openCC}
           onSwitchUser={() => {
             setStackNow([]);
             go({ name: "users" }, false);
@@ -288,6 +294,7 @@ function Console() {
       view = (
         <SearchScreen
           onExit={back}
+          onCC={openCC}
           onProject={(p) => {
             // Replace the search page with the game so "back" returns to where search was opened from.
             back();
