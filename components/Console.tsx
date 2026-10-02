@@ -2,13 +2,15 @@
 /** The console itself: which screen is up, the overlays on top of it, and the transitions between them. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ConsoleProvider, useConsole } from "@/lib/console";
-import { InputProvider } from "@/lib/input";
+import { InputProvider, activity, rumble } from "@/lib/input";
 import { sound } from "@/lib/sound";
 import type { Project } from "@/lib/types";
 import { CoverArt } from "./CoverArt";
-import { ControlCenter, LinkSplash, Search, Settings, type CCAction } from "./Overlays";
+import { ControlCenter, CreateMenu, Dimmer, LinkSplash, type CCAction } from "./Overlays";
 import { Home, initialHome, type HomeNav, type HomeState } from "./screens/Home";
 import { GameHub, LibraryPage, ProfilePage, TrophiesPage, type PageNav } from "./screens/Pages";
+import { SearchScreen } from "./screens/Search";
+import { SettingsApp } from "./screens/Settings";
 import { BootScreen, OffScreen, UserSelect } from "./screens/System";
 import { HomeButton, Logo, TrophyToasts, useParallax } from "./ui";
 
@@ -20,10 +22,15 @@ type Screen =
   | { name: "game"; project: Project }
   | { name: "profile" }
   | { name: "trophies" }
-  | { name: "library" };
+  | { name: "library" }
+  | { name: "settings" }
+  | { name: "search" };
 
 type Launch = { project: Project; rect: { x: number; y: number; w: number; h: number }; phase: "grow" | "splash" | "out" };
 type Splash = { url: string; title: string; blocked: boolean; placeholder: boolean };
+
+/** Screens that sit outside the normal back-stack (power and sign-in). */
+const systemScreens = ["boot", "off", "users"];
 
 export default function App() {
   return (
@@ -36,14 +43,14 @@ export default function App() {
 }
 
 function Console() {
-  const { award, markOpened, t } = useConsole();
+  const { award, markOpened, t, setUser, prefs, gameThemes, idleDim } = useConsole();
   useParallax();
   const [screen, setScreen] = useState<Screen>({ name: "boot" });
   const [stack, setStack] = useState<Screen[]>([]);
   const [home, setHome] = useState<HomeState>(initialHome);
   const [cc, setCc] = useState<null | { startIn?: "contact" }>(null);
-  const [settings, setSettings] = useState(false);
-  const [search, setSearch] = useState(false);
+  const [create, setCreate] = useState(false);
+  const [dim, setDim] = useState(false);
   const [splash, setSplash] = useState<Splash | null>(null);
   const [launch, setLaunch] = useState<Launch | null>(null);
   const [screenKey, setScreenKey] = useState(0);
@@ -64,7 +71,7 @@ function Console() {
 
   const go = useCallback((next: Screen, push = true) => {
     const cur = screenRef.current;
-    if (push && cur.name !== "boot" && cur.name !== "off" && cur.name !== "users") setStackNow([...stackRef.current.slice(-10), cur]);
+    if (push && !systemScreens.includes(cur.name)) setStackNow([...stackRef.current.slice(-10), cur]);
     screenRef.current = next;
     setScreen(next);
     setScreenKey((k) => k + 1);
@@ -81,19 +88,47 @@ function Console() {
 
   const toHome = useCallback(() => {
     setStackNow([]);
+    if (screenRef.current.name === "home") return;
     go({ name: "home" }, false);
   }, [go]);
+
+  // Game themes: the hub plays its game's theme; system pages go back to the system track. The home screen picks per tile.
+  useEffect(() => {
+    if (screen.name === "game") sound.setTheme(gameThemes ? screen.project.id : null);
+    else if (screen.name !== "home") sound.setTheme(null);
+  }, [screen, gameThemes]);
+
+  // The Create button, from any screen.
+  useEffect(() => {
+    const on = () => {
+      if (systemScreens.includes(screenRef.current.name)) return;
+      sound.select();
+      setCreate((v) => !v);
+    };
+    window.addEventListener("console:create", on);
+    return () => window.removeEventListener("console:create", on);
+  }, []);
+
+  // Dim the screen after a while without input.
+  useEffect(() => {
+    if (!idleDim) return;
+    const id = setInterval(() => {
+      if (systemScreens.includes(screenRef.current.name)) return;
+      if (Date.now() - activity.at > idleDim * 60_000) setDim(true);
+    }, 5000);
+    return () => clearInterval(id);
+  }, [idleDim]);
 
   /** Grow the focused tile to full screen, show the title card, then open the game hub. */
   const launchGame = useCallback(
     (project: Project) => {
       if (launch) return;
-      const el = document.querySelector<HTMLElement>("[data-launch-src] .tile-box") ?? document.querySelector<HTMLElement>('[data-focus="true"]');
+      const el = document.querySelector<HTMLElement>("[data-launch-src] .tile-box") ?? document.querySelector<HTMLElement>('[data-focus="true"]') ?? document.querySelector<HTMLElement>(".is-focus");
       const r = el?.getBoundingClientRect();
-      const rect = r ? { x: r.left, y: r.top, w: r.width, h: r.height } : { x: window.innerWidth / 2 - 60, y: window.innerHeight / 2 - 60, w: 120, h: 120 };
+      const rect = r && r.width ? { x: r.left, y: r.top, w: r.width, h: r.height } : { x: window.innerWidth / 2 - 60, y: window.innerHeight / 2 - 60, w: 120, h: 120 };
       sound.open();
+      rumble(260, 0.5, 0.3);
       setCc(null);
-      setSearch(false);
       setLaunch({ project, rect, phase: "grow" });
       later(() => setLaunch((l) => l && { ...l, phase: "splash" }), 60);
       later(() => {
@@ -107,7 +142,7 @@ function Console() {
     [launch, go, markOpened],
   );
 
-  const openLink = useCallback((url: string, title: string, sample?: boolean) => {
+  const openLink = useCallback((url: string, title: string) => {
     const placeholder = !url || url === "#";
     let blocked = false;
     if (!placeholder) {
@@ -115,8 +150,7 @@ function Console() {
       if (w) w.opener = null;
       else blocked = true;
     } else sound.error();
-    setSplash({ url, title, blocked, placeholder: placeholder || false });
-    void sample;
+    setSplash({ url, title, blocked, placeholder });
   }, []);
 
   const onHomeNav = (n: HomeNav) => {
@@ -126,16 +160,12 @@ function Console() {
       case "profile":
       case "trophies":
       case "library":
+      case "settings":
+      case "search":
         sound.select();
         return go({ name: n.to });
       case "link":
-        return openLink(n.url, n.title, n.sample);
-      case "search":
-        sound.select();
-        return setSearch(true);
-      case "settings":
-        sound.select();
-        return setSettings(true);
+        return openLink(n.url, n.title);
       case "cc":
         sound.select();
         return setCc({});
@@ -147,7 +177,7 @@ function Console() {
       case "game":
         return launchGame(n.project);
       case "link":
-        return openLink(n.url, n.title, n.sample);
+        return openLink(n.url, n.title);
       case "trophies":
         return go({ name: "trophies" });
       case "contact":
@@ -167,32 +197,45 @@ function Console() {
         return toHome();
       case "trophies":
         setCc(null);
-        return go({ name: "trophies" });
+        if (screenRef.current.name !== "trophies") go({ name: "trophies" });
+        return;
       case "settings":
         setCc(null);
-        return setSettings(true);
+        if (screenRef.current.name !== "settings") go({ name: "settings" });
+        return;
+      case "game":
+        setCc(null);
+        if (screenRef.current.name === "game" && screenRef.current.project.id === a.project.id) return;
+        return launchGame(a.project);
       case "link":
-        return openLink(a.url, a.title, a.sample);
+        return openLink(a.url, a.title);
       case "power":
         setCc(null);
         setStackNow([]);
+        sound.setMusic(false);
         if (a.mode === "rest") {
           award("power-nap");
           // Let the trophy toast show before the screen goes dark.
           later(() => go({ name: "off", mode: "rest" }, false), 2600);
         } else if (a.mode === "off") go({ name: "off", mode: "shutdown" }, false);
         else go({ name: "boot" }, false);
-        sound.setMusic(false);
     }
   };
 
   const current = screen.name === "game" ? screen.project : null;
-  const showHomeButton = !["boot", "off", "users"].includes(screen.name) && !cc;
+  const showHomeButton = !systemScreens.includes(screen.name) && !cc;
 
   let view: React.ReactNode;
   switch (screen.name) {
     case "boot":
-      view = <BootScreen onDone={() => go({ name: "users" }, false)} />;
+      view = (
+        <BootScreen
+          onDone={() => {
+            if (prefs.music) sound.setMusic(true);
+            go({ name: "users" }, false);
+          }}
+        />
+      );
       break;
     case "off":
       view = <OffScreen mode={screen.mode} onWake={() => go({ name: "boot" }, false)} />;
@@ -202,6 +245,8 @@ function Console() {
         <UserSelect
           onPick={(who) => {
             award("hello");
+            setUser(who);
+            setHome(initialHome);
             if (who === "recruiter") {
               setStackNow([{ name: "home" }]);
               go({ name: "profile" }, false);
@@ -228,29 +273,51 @@ function Console() {
     case "library":
       view = <LibraryPage onNav={onPageNav} />;
       break;
+    case "settings":
+      view = (
+        <SettingsApp
+          onExit={back}
+          onSwitchUser={() => {
+            setStackNow([]);
+            go({ name: "users" }, false);
+          }}
+        />
+      );
+      break;
+    case "search":
+      view = (
+        <SearchScreen
+          onExit={back}
+          onProject={(p) => {
+            // Replace the search page with the game so "back" returns to where search was opened from.
+            back();
+            launchGame(p);
+          }}
+          onLink={(url, title) => openLink(url, title)}
+        />
+      );
+      break;
   }
 
   return (
-    <div className="console">
+    <div className={`console ${dim ? "is-dim" : ""}`}>
       <div className={`stage stage-${screen.name}`} key={screenKey}>
         {view}
       </div>
       {launch && <LaunchFx launch={launch} />}
       {showHomeButton && <HomeButton onClick={() => (sound.select(), setCc({}))} />}
       {cc && <ControlCenter current={current} startIn={cc.startIn} onClose={() => setCc(null)} onAction={onCC} />}
-      {settings && <Settings onClose={() => setSettings(false)} />}
-      {search && (
-        <Search
-          onClose={() => setSearch(false)}
-          onProject={(p) => launchGame(p)}
-          onLink={(url, title, sample) => {
-            setSearch(false);
-            openLink(url, title, sample);
+      {create && <CreateMenu title={current ? current.title : "AFU Console"} onClose={() => setCreate(false)} />}
+      {splash && <LinkSplash {...splash} onClose={() => setSplash(null)} />}
+      <TrophyToasts />
+      {dim && (
+        <Dimmer
+          onWake={() => {
+            activity.at = Date.now();
+            setDim(false);
           }}
         />
       )}
-      {splash && <LinkSplash {...splash} onClose={() => setSplash(null)} />}
-      <TrophyToasts />
       <noscript>{t("boot.press")}</noscript>
     </div>
   );

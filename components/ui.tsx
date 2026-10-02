@@ -15,6 +15,7 @@ export function Logo({ text, spec, className }: { text: string; spec: LogoSpec; 
 }
 
 export function Clock() {
+  const { clock24, lang } = useConsole();
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
@@ -22,7 +23,26 @@ export function Clock() {
     return () => clearInterval(id);
   }, []);
   if (!now) return <span className="clock" />;
-  return <span className="clock">{now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}</span>;
+  return <span className="clock">{now.toLocaleTimeString(lang === "tr" ? "tr-TR" : "en-US", { hour: clock24 ? "2-digit" : "numeric", minute: "2-digit", hour12: !clock24 })}</span>;
+}
+
+/** "3 min ago" style label for notification times. */
+export function timeAgo(iso: string, lang: "tr" | "en") {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: "auto" });
+  if (s < 60) return rtf.format(0, "second");
+  if (s < 3600) return rtf.format(-Math.round(s / 60), "minute");
+  if (s < 86400) return rtf.format(-Math.round(s / 3600), "hour");
+  return rtf.format(-Math.round(s / 86400), "day");
+}
+
+/** Pill-shaped on/off switch, like the console's settings toggles. */
+export function Switch({ on }: { on: boolean }) {
+  return (
+    <span className={`switch ${on ? "is-on" : ""}`} aria-hidden="true">
+      <span />
+    </span>
+  );
 }
 
 /** Face-button glyphs drawn as plain geometry. */

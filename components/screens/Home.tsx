@@ -163,7 +163,7 @@ function HeroArt({ tile }: { tile: Tile }) {
 type Card = { key: string; title: string; body: string; tier?: Achievement["tier"]; art?: { src?: string; seed: string; motif: Project["motif"]; palette: Project["palette"] }; icon?: string; ring?: number };
 
 export function Home({ state, setState, onNav }: { state: HomeState; setState: (fn: (s: HomeState) => HomeState) => void; onNav: (n: HomeNav) => void }) {
-  const { t, lang, award } = useConsole();
+  const { t, lang, award, gameThemes } = useConsole();
   const tiles = state.tab === "games" ? gamesTiles : mediaTiles;
   const idx = Math.min(state.idx[state.tab], tiles.length - 1);
   const tile = tiles[idx];
@@ -172,6 +172,12 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
   useEffect(() => {
     if (state.tab === "media") award("reader");
   }, [state.tab, award]);
+
+  // The focused game's theme plays while its tile is selected (when music is on).
+  const themeSeed = tile.kind === "project" && gameThemes ? tile.p.id : null;
+  useEffect(() => {
+    sound.setTheme(themeSeed);
+  }, [themeSeed]);
 
   // Coming back from a game or page lands on the tile row, not halfway down the page.
   useEffect(() => {
@@ -277,6 +283,15 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
   useLayer(
     (a: Action) => {
       if (a === "home") return onNav({ to: "cc" });
+      if (a === "triangle") return onNav({ to: "search" });
+      if (a === "l1" || a === "r1") return switchTab(a === "l1" ? "games" : "media");
+      if (a === "options") {
+        // Options opens the "…" menu of the selected game, wherever the focus is.
+        if (!moreItems.length) return;
+        sound.select();
+        setState((s) => ({ ...s, zone: "actions", act: 1 }));
+        return setMenu(0);
+      }
       if (zone === "top") {
         if (a === "left" && state.top > 0) setZone("top", { top: state.top - 1 });
         else if (a === "right" && state.top < topItems.length - 1) setZone("top", { top: state.top + 1 });
@@ -316,7 +331,31 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
       }
     },
     menu === null,
+    { options: true },
   );
+
+  // Mouse wheel: vertical scrolls between the tile row and the cards, horizontal (or Shift) moves through tiles.
+  const wheelLock = useRef(0);
+  const onWheel = (e: React.WheelEvent) => {
+    if (menu !== null) return;
+    const now = performance.now();
+    if (now < wheelLock.current) return;
+    const dx = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.shiftKey ? e.deltaY : 0;
+    if (Math.abs(dx) > 8) {
+      wheelLock.current = now + 140;
+      select(idx + (dx > 0 ? 1 : -1));
+      return;
+    }
+    if (Math.abs(e.deltaY) < 12) return;
+    wheelLock.current = now + 450;
+    if (e.deltaY > 0) {
+      if (zone === "top") setZone("tiles");
+      else if (zone === "tiles" || zone === "actions") cardCount ? setZone("cards", { card: state.card }) : setZone("actions");
+    } else {
+      if (zone === "cards") setZone("tiles");
+      else if (zone === "actions") setZone("tiles");
+    }
+  };
 
   // Swipe: sideways moves through tiles, up/down scrolls between hero and cards.
   const swipe = useSwipe((dir, steps) => {
@@ -416,7 +455,7 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
   }
 
   return (
-    <div className={`screen home zone-${zone} tab-${state.tab}`} {...swipe}>
+    <div className={`screen home zone-${zone} tab-${state.tab}`} {...swipe} onWheel={onWheel}>
       <HeroBg tile={tile} />
       <div className="home-scroll">
         <header className="topbar">
