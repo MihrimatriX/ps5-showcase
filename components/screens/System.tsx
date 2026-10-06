@@ -177,7 +177,7 @@ export function UserSelect({ onPick }: { onPick: (who: Who) => void }) {
         {users.map((u, i) => (
           <button key={u.id} className={`user ${leaving === u.id ? "is-picked" : ""}`} {...navProps(grid.pos, 0, i, grid.focus, () => pickUser(u.id))}>
             {u.id === "owner" ? (
-              <Avatar name={u.name} size="xl" ring />
+              <Avatar name={u.name} src={profile.avatar} size="xl" ring />
             ) : (
               <span className={`avatar avatar-xl avatar-${u.id}`}>{u.icon ? <Icon name={u.icon} /> : <Icon name="users" />}</span>
             )}

@@ -106,7 +106,7 @@ export function ControlCenter({ current, onClose, onAction, startIn }: { current
         : [{ key: "none", label: t("cc.noNotifications"), icon: "bell" }]),
       ...(notes.list.length ? [{ key: "clear", label: x("Tümünü temizle", "Clear all"), icon: "plus", run: () => c.clearNotifications() }] : []),
     ],
-    gamebase: socials.map((s) => ({ key: s.id, label: s.label, hint: s.handle, icon: s.id === "blog" ? "globe" : s.id, run: () => onAction({ to: "link", url: s.url, title: s.label, sample: s.sample }) })),
+    gamebase: socials.filter((s) => c.user === "recruiter" || s.id !== "cv").map((s) => ({ key: s.id, label: s.label, hint: s.handle, icon: s.id === "blog" ? "globe" : s.id, run: () => onAction({ to: "link", url: s.url, title: s.label, sample: s.sample }) })),
     music: [
       { key: "play", label: c.music ? x("Duraklat", "Pause") : x("Çal", "Play"), hint: musicName, icon: c.music ? "pause" : "play", run: () => c.setMusic(!c.music) },
       { key: "next", label: x("Sonraki parça", "Next track"), hint: pick(lang, tracks[(playing.track + 1) % tracks.length].name), icon: "next", run: () => sound.nextTrack(1) },
@@ -316,7 +316,7 @@ export function ControlCenter({ current, onClose, onAction, startIn }: { current
             ))}
           </div>
           <div className="cc-status">
-            <Avatar name={profile.name} size="sm" />
+            <Avatar name={profile.name} src={profile.avatar} size="sm" />
             {battery && (
               <span className={`cc-battery ${battery.charging ? "is-charging" : ""}`} title={`${Math.round(battery.level * 100)}%`}>
                 <Icon name="battery" />
@@ -452,6 +452,36 @@ export function LinkSplash({ url, title, blocked, placeholder, onClose }: { url:
             {t("open")}
           </a>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** A game's trailer with sound and controls, over everything (the "Trailer" button). Back or a click outside closes it. */
+export function VideoPlayer({ id, title, onClose }: { id: string; title: string; onClose: () => void }) {
+  const { t } = useConsole();
+  useLayer((a) => {
+    if (a === "back" || a === "home") (sound.back(), onClose());
+  });
+  // The synthesized music would play over the trailer's own sound.
+  useEffect(() => {
+    const was = sound.music;
+    if (was) sound.setMusic(false);
+    return () => {
+      if (was) sound.setMusic(true);
+    };
+  }, []);
+  return (
+    <div className="video-player" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
+      <div className="video-frame" onClick={(e) => e.stopPropagation()}>
+        <iframe src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&modestbranding=1&playsinline=1`} title={title} allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowFullScreen />
+      </div>
+      <div className="video-bar" onClick={(e) => e.stopPropagation()}>
+        <strong>{title}</strong>
+        <button className="btn-pill" onClick={() => (sound.back(), onClose())}>
+          <Icon name="plus" className="rot45" />
+          {t("store.close")}
+        </button>
       </div>
     </div>
   );

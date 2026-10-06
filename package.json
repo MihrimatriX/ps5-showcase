@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start -p 3100",
     "typecheck": "tsc --noEmit",
-    "preview": "node scripts/build-preview.mjs"
+    "preview": "node scripts/build-preview.mjs",
+    "sync:games": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/sync-igdb.mjs",
+    "sync:github": "node scripts/sync-github.mjs"
   },
   "dependencies": {
     "next": "^16.3.7",

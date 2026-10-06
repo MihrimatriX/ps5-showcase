@@ -5,11 +5,13 @@
  * Every setting here really does something (see lib/console.tsx for what is stored).
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { repos } from "@/content/github";
 import { achievements, media, projects } from "@/content/portfolio";
-import { consoleTrophies, useConsole, useNotifications, useNowPlaying, type Theme } from "@/lib/console";
+import { consoleTrophies, useConsole, useLibrary, useNotifications, useNowPlaying, type Theme } from "@/lib/console";
 import { pick } from "@/lib/i18n";
 import { rumble, useLayer, type Action } from "@/lib/input";
 import { sound, tracks } from "@/lib/sound";
+import type { Project } from "@/lib/types";
 import { Icon } from "../Icons";
 import { AmbientBg, Clock, Hints, Switch } from "../ui";
 
@@ -170,6 +172,7 @@ export function SettingsApp({ onExit, onSwitchUser, onCC }: { onExit: () => void
               options: themes.map((th) => ({ label: t(`theme.${th}`), value: th, swatch: th })),
               set: (v) => c.setPref("theme", v as Theme),
             },
+            { kind: "toggle", id: "trailers", label: x("Fragmanları otomatik oynat", "Autoplay trailers"), desc: x("Seçili oyunun fragmanı arka planda sessizce oynar.", "The selected game's trailer plays silently in the background."), value: c.trailers, set: (v) => c.setPref("trailers", v) },
             { kind: "toggle", id: "waves", label: x("Dalga arka planı", "Wave background"), desc: x("Sistem ekranlarının arkasındaki hareketli ışık dalgası.", "The moving sea of light behind system screens."), value: c.waves, set: (v) => c.setPref("waves", v) },
           ],
         },
@@ -298,7 +301,8 @@ export function SettingsApp({ onExit, onSwitchUser, onCC }: { onExit: () => void
             { kind: "info", id: "version", label: x("Sistem yazılımı", "System software"), value: `${APP_VERSION} · ${x("Güncel", "Up to date")}` },
             { kind: "info", id: "browser", label: x("Tarayıcı", "Browser"), value: typeof navigator !== "undefined" ? browserName(navigator.userAgent) : "" },
             { kind: "info", id: "cpu", label: x("İşlemci çekirdeği", "CPU cores"), value: typeof navigator !== "undefined" ? `${navigator.hardwareConcurrency ?? "?"}` : "" },
-            { kind: "info", id: "content", label: x("İçerik", "Content"), value: x(`${projects.length} oyun · ${media.length} medya · ${achievements.length} başarı`, `${projects.length} games · ${media.length} media · ${achievements.length} achievements`) },
+            { kind: "info", id: "content", label: x("İçerik", "Content"), value: x(`${projects.length} oyun · ${repos.length} GitHub projesi`, `${projects.length} games · ${repos.length} GitHub projects`) },
+            { kind: "info", id: "data", label: x("Oyun verisi", "Game data"), value: "Powered by IGDB.com" },
           ],
         },
         {
@@ -673,14 +677,21 @@ export function ConfirmDialog({ text, yes, no, onYes, onNo }: { text: string; ye
 /* ------------------------------------------------------------------ storage */
 
 /** Projects shown as installed games; their "size" grows with the hours that went into them. */
-export function gameSize(hours: number) {
-  return Math.round((hours * 0.38 + 3.2) * 10) / 10;
+/** Install size in GB shown on the Storage page. */
+export function gameSize(p: Project) {
+  if (p.hours) return Math.round((p.hours * 0.38 + 3.2) * 10) / 10;
+  // ponytail: IGDB has no install sizes, so real games get a stable 20–90 GB estimate from their id. Illustrative only.
+  let h = 0;
+  for (const ch of p.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return 20 + (h % 700) / 10;
 }
 
 function StorageView({ lang }: { lang: "tr" | "en" }) {
   const x = (tr: string, en: string) => (lang === "tr" ? tr : en);
   const total = 667.2;
-  const games = projects.map((p) => ({ p, size: gameSize(p.hours) })).sort((a, b) => b.size - a.size);
+  const games = useLibrary()
+    .map((p) => ({ p, size: gameSize(p) }))
+    .sort((a, b) => b.size - a.size);
   const gamesSize = games.reduce((s, g) => s + g.size, 0);
   const mediaSize = media.reduce((s, m) => s + m.minutes * 0.05, 0) + 1.2;
   let saved = 0;
@@ -700,7 +711,7 @@ function StorageView({ lang }: { lang: "tr" | "en" }) {
   return (
     <div className="storage">
       <div className="storage-head">
-        <strong>{fmt(total - used)}</strong>
+        <strong>{fmt(Math.max(0, total - used))}</strong>
         <span className="muted">
           {x("boş", "free")} · {fmt(total)}
         </span>
@@ -725,7 +736,11 @@ function StorageView({ lang }: { lang: "tr" | "en" }) {
       <div className="storage-games">
         {games.map(({ p, size }) => (
           <div key={p.id} className="storage-game">
-            <span className="storage-swatch" style={{ background: `linear-gradient(135deg, ${p.palette[2]}, ${p.palette[1]})` }} />
+            {p.cover ? (
+              <img className="storage-swatch" src={p.cover} alt="" loading="lazy" />
+            ) : (
+              <span className="storage-swatch" style={{ background: `linear-gradient(135deg, ${p.palette[2]}, ${p.palette[1]})` }} />
+            )}
             <span>{p.title}</span>
             <span className="storage-mini">
               <span style={{ width: `${(size / games[0].size) * 100}%`, background: p.palette[2] }} />

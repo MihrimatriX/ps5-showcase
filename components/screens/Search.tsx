@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { media, projects, socials } from "@/content/portfolio";
-import { useConsole } from "@/lib/console";
+import { useConsole, useStoreSearch } from "@/lib/console";
 import { pick } from "@/lib/i18n";
 import { useLayer, type TextInput } from "@/lib/input";
 import { sound } from "@/lib/sound";
@@ -35,7 +35,7 @@ export function SearchScreen({
   onLink: (url: string, title: string, sample?: boolean) => void;
   onCC: () => void;
 }) {
-  const { t, lang, opened } = useConsole();
+  const { t, lang, opened, user } = useConsole();
   const x = (tr: string, en: string) => (lang === "tr" ? tr : en);
   const [q, setQ] = useState("");
   const [zone, setZone] = useState<"kb" | number>("kb");
@@ -68,11 +68,13 @@ export function SearchScreen({
     () => [
       ...projects.map((p) => ({ key: `p-${p.id}`, title: p.title, sub: `${pick(lang, p.genre)} · ${p.tech.slice(0, 3).join(", ")}`, project: p, art: { src: p.cover, seed: p.id, motif: p.motif, palette: p.palette } })),
       ...media.map((m) => ({ key: `m-${m.id}`, title: pick(lang, m.title), sub: `${t(`kind.${m.kind}`)} · ${pick(lang, m.summary)}`, art: { src: m.image, seed: m.id, motif: m.motif, palette: m.palette }, url: m.url, sample: m.sample })),
-      ...socials.map((s) => ({ key: `s-${s.id}`, title: s.label, sub: s.handle, icon: s.id === "blog" ? "globe" : s.id, url: s.url, sample: s.sample })),
+      ...socials.filter((s) => user === "recruiter" || s.id !== "cv").map((s) => ({ key: `s-${s.id}`, title: s.label, sub: s.handle, icon: s.id === "blog" ? "globe" : s.id, url: s.url, sample: s.sample })),
     ],
-    [lang, t],
+    [lang, t, user],
   );
 
+  // Games beyond the catalog, from IGDB; they open in the store page with a Buy button.
+  const remote = useStoreSearch(q);
   const rows: Row[] = useMemo(() => {
     const n = q.trim().toLocaleLowerCase(lang);
     if (!n) {
@@ -83,14 +85,20 @@ export function SearchScreen({
         { id: "media", title: t("tab.media"), items: all.filter((r) => !r.project) },
       ];
     }
-    const hit = (r: Result) => `${r.title} ${r.sub}`.toLocaleLowerCase(lang).includes(n) || !!r.project?.tech.some((x) => x.toLocaleLowerCase(lang).includes(n));
+    // Title, genre, tags and the developer ("Insomniac" finds Spider-Man 2).
+    const hit = (r: Result) => `${r.title} ${r.sub} ${r.project ? pick(lang, r.project.role) : ""}`.toLocaleLowerCase(lang).includes(n) || !!r.project?.tech.some((x) => x.toLocaleLowerCase(lang).includes(n));
     const found = all.filter(hit);
     return [
       { id: "games", title: t("tab.games"), items: found.filter((r) => r.project) },
+      {
+        id: "store",
+        title: t("store"),
+        items: remote.games.map((p) => ({ key: `r-${p.id}`, title: p.title, sub: pick(lang, p.genre), project: p, art: { src: p.cover, seed: p.id, motif: p.motif, palette: p.palette } })),
+      },
       { id: "media", title: x("Medya ve bağlantılar", "Media and links"), items: found.filter((r) => !r.project) },
     ].filter((r) => r.items.length);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, all, lang, opened, t]);
+  }, [q, all, lang, opened, t, remote.games]);
 
   // If the rows change under the focus (typing), keep the focus valid.
   useEffect(() => {
@@ -181,7 +189,7 @@ export function SearchScreen({
 
   const resultsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (zone === "kb") return;
+    if (zone === "kb" || document.documentElement.dataset.input === "pointer") return;
     const el = resultsRef.current?.querySelector<HTMLElement>(`[data-row="${zone}"] .is-focus`);
     el?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
   }, [zone, col]);
@@ -224,7 +232,7 @@ export function SearchScreen({
           <div className="search-empty">
             <Icon name="search" />
             <strong>{t("search.empty")}</strong>
-            <small className="muted">{x("Başka bir kelime ya da teknoloji adı dene (ör. React, WebGL).", "Try another word or a technology (e.g. React, WebGL).")}</small>
+            <small className="muted">{x("Başka bir oyun adı, tür ya da stüdyo dene (ör. RPG, Racing, Insomniac).", "Try another game, genre or studio (e.g. RPG, Racing, Insomniac).")}</small>
           </div>
         )}
         {rows.map((row, r) => (

@@ -6,7 +6,9 @@ import type { Logo as LogoSpec, Project, Tier } from "@/lib/types";
 import { Icon, TrophyIcon } from "./Icons";
 
 export function Logo({ text, spec, className }: { text: string; spec: LogoSpec; className?: string }) {
-  const style: CSSProperties = spec.gradient ? { backgroundImage: `linear-gradient(100deg, ${spec.gradient[0]}, ${spec.gradient[1]})` } : {};
+  // --fit: longest word length, so tile logos can shrink until that word fits on one line.
+  const style = { "--fit": Math.max(...text.split(/\s+/).map((w) => w.length)), "--len": text.length } as CSSProperties;
+  if (spec.gradient) style.backgroundImage = `linear-gradient(100deg, ${spec.gradient[0]}, ${spec.gradient[1]})`;
   return (
     <div className={`logo logo-${spec.font} ${spec.caps ? "logo-caps" : ""} ${spec.gradient ? "logo-grad" : ""} ${className ?? ""}`} style={style}>
       {text}
@@ -24,6 +26,11 @@ export function Clock() {
   }, []);
   if (!now) return <span className="clock" />;
   return <span className="clock">{now.toLocaleTimeString(lang === "tr" ? "tr-TR" : "en-US", { hour: clock24 ? "2-digit" : "numeric", minute: "2-digit", hour12: !clock24 })}</span>;
+}
+
+/** A store price, e.g. "$69.99" / "69,99 $". */
+export function formatPrice(usd: number, lang: "tr" | "en") {
+  return usd.toLocaleString(lang === "tr" ? "tr-TR" : "en-US", { style: "currency", currency: "USD" });
 }
 
 /** "3 min ago" style label for notification times. */
@@ -130,11 +137,68 @@ export function TierCounts({ counts }: { counts: Record<Tier, number> }) {
   );
 }
 
-export function Avatar({ name, size = "md", ring }: { name: string; size?: "sm" | "md" | "lg" | "xl"; ring?: boolean }) {
+export function Avatar({ name, src, size = "md", ring }: { name: string; src?: string; size?: "sm" | "md" | "lg" | "xl"; ring?: boolean }) {
   return (
     <span className={`avatar avatar-${size} ${ring ? "avatar-ring" : ""}`}>
-      <span>{name.slice(0, 1)}</span>
+      {src ? <img className="avatar-photo" src={src} alt="" draggable={false} /> : <span>{name.slice(0, 1)}</span>}
     </span>
+  );
+}
+
+/**
+ * A game's trailer behind its key art, muted, once it has stayed selected for a moment (like the console's home screen).
+ * Nothing loads with reduced motion, with the setting off, or on phone-sized screens (mobile data).
+ */
+export function Trailer({ id, delay = 2500 }: { id?: string; delay?: number }) {
+  const { reducedMotion, trailers } = useConsole();
+  const [on, setOn] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const frame = useRef<HTMLIFrameElement>(null);
+  useEffect(() => {
+    setOn(false);
+    setPlaying(false);
+    if (!id || reducedMotion || !trailers || window.matchMedia("(max-width: 760px)").matches) return;
+    const timer = setTimeout(() => setOn(true), delay);
+    return () => clearTimeout(timer);
+  }, [id, delay, reducedMotion, trailers]);
+
+  // The player is only shown once YouTube reports the video actually playing: a slow, blocked or failed
+  // video leaves the key art alone instead of covering it with a black frame and a spinner.
+  useEffect(() => {
+    if (!on) return;
+    const onMessage = (e: MessageEvent) => {
+      if (e.source !== frame.current?.contentWindow || typeof e.data !== "string") return;
+      let msg: { event?: string; info?: unknown };
+      try {
+        msg = JSON.parse(e.data);
+      } catch {
+        return;
+      }
+      const state = msg.event === "onStateChange" ? msg.info : msg.event === "infoDelivery" ? (msg.info as { playerState?: number } | null)?.playerState : undefined;
+      // Shown only while playing: paused (Chrome pauses muted video in hidden tabs), ended or unstarted all fall
+      // back to the key art. Buffering (3) keeps the current state so a short stall doesn't flicker.
+      if (state === 1) setPlaying(true);
+      else if (typeof state === "number" && state !== 3) setPlaying(false);
+      if (msg.event === "onError") setOn(false);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [on]);
+
+  if (!on || !id) return null;
+  const origin = "https://www.youtube-nocookie.com";
+  return (
+    <div className={`trailer ${playing ? "is-ready" : ""}`} aria-hidden="true">
+      <iframe
+        ref={frame}
+        src={`${origin}/embed/${id}?autoplay=1&mute=1&controls=0&start=4&playsinline=1&rel=0&modestbranding=1&disablekb=1&iv_load_policy=3&enablejsapi=1`}
+        title=""
+        tabIndex={-1}
+        allow="autoplay; encrypted-media"
+        // Subscribe to the player's state events (the embed's postMessage protocol).
+        onLoad={() => frame.current?.contentWindow?.postMessage(JSON.stringify({ event: "listening", id: "trailer", channel: "widget" }), origin)}
+      />
+    </div>
   );
 }
 

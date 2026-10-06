@@ -4,7 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { t as translate, type Key } from "./i18n";
 import { rumble } from "./input";
 import { sound } from "./sound";
-import type { L, Lang, Tier } from "./types";
+import { projects } from "@/content/portfolio";
+import type { L, Lang, Project, Tier } from "./types";
 
 export type Theme = "cosmic" | "aurora" | "ember" | "mono";
 export type User = "owner" | "guest" | "recruiter";
@@ -30,6 +31,8 @@ export type Prefs = {
   gameThemes: boolean;
   /** Animated wave field behind system screens. */
   waves: boolean;
+  /** Play a game's trailer behind its key art after a moment. */
+  trailers: boolean;
 };
 
 export const defaultPrefs: Prefs = {
@@ -47,16 +50,18 @@ export const defaultPrefs: Prefs = {
   haptics: true,
   gameThemes: true,
   waves: true,
+  trailers: true,
 };
 
 export const consoleTrophies: { id: string; tier: Tier; name: L; detail: L }[] = [
   { id: "hello", tier: "bronze", name: { tr: "Hoş geldin", en: "Welcome" }, detail: { tr: "Konsola giriş yaptın", en: "Signed in to the console" } },
-  { id: "first-play", tier: "bronze", name: { tr: "İlk oyun", en: "First game" }, detail: { tr: "Bir proje başlattın", en: "Started a project" } },
-  { id: "explorer", tier: "silver", name: { tr: "Kaşif", en: "Explorer" }, detail: { tr: "Üç farklı proje açtın", en: "Opened three different projects" } },
-  { id: "curious", tier: "bronze", name: { tr: "Meraklı", en: "Curious" }, detail: { tr: "Profili inceledin", en: "Checked out the profile" } },
+  { id: "first-play", tier: "bronze", name: { tr: "İlk oyun", en: "First game" }, detail: { tr: "Bir oyun başlattın", en: "Started a game" } },
+  { id: "explorer", tier: "silver", name: { tr: "Kaşif", en: "Explorer" }, detail: { tr: "Üç farklı oyun açtın", en: "Opened three different games" } },
+  { id: "curious", tier: "bronze", name: { tr: "Meraklı", en: "Curious" }, detail: { tr: "Mağazaya ya da profile göz attın", en: "Browsed the store or the profile" } },
   { id: "librarian", tier: "bronze", name: { tr: "Kütüphaneci", en: "Librarian" }, detail: { tr: "Kütüphaneye göz attın", en: "Browsed the library" } },
   { id: "reader", tier: "bronze", name: { tr: "Okur", en: "Reader" }, detail: { tr: "Medya sekmesine geçtin", en: "Switched to the media tab" } },
   { id: "polyglot", tier: "bronze", name: { tr: "Çok dilli", en: "Polyglot" }, detail: { tr: "Dili değiştirdin", en: "Changed the language" } },
+  { id: "shopper", tier: "bronze", name: { tr: "Müşteri", en: "Customer" }, detail: { tr: "Mağazadan bir oyun aldın", en: "Bought a game from the store" } },
   { id: "power-nap", tier: "silver", name: { tr: "Şekerleme", en: "Power nap" }, detail: { tr: "Dinlenme moduna girdin", en: "Entered rest mode" } },
   { id: "platinum", tier: "platinum", name: { tr: "Tam tur", en: "Grand tour" }, detail: { tr: "Tüm konsol kupalarını topladın", en: "Collected every console trophy" } },
 ];
@@ -86,12 +91,18 @@ type ConsoleState = Prefs & {
   clearNotifications: () => void;
   user: User;
   setUser: (u: User) => void;
+  /** Store games bought on this device (demo purchases, no payment). */
+  bought: string[];
+  /** Bought games that came from the live store search, not the synced catalog. */
+  extras: Project[];
+  buy: (p: Project) => void;
+  owns: (p: Project) => boolean;
 };
 
 const Ctx = createContext<ConsoleState | null>(null);
 const STORE = "afu-console.v1";
 
-type Saved = Partial<Prefs> & { earned?: Record<string, string>; opened?: string[]; seenAt?: string; clearedAt?: string };
+type Saved = Partial<Prefs> & { earned?: Record<string, string>; opened?: string[]; seenAt?: string; clearedAt?: string; bought?: string[]; extras?: Project[] };
 
 function load(): Saved {
   try {
@@ -109,13 +120,15 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
   const [seenAt, setSeenAt] = useState("");
   const [clearedAt, setClearedAt] = useState("");
   const [user, setUser] = useState<User>("owner");
+  const [bought, setBought] = useState<string[]>([]);
+  const [extras, setExtras] = useState<Project[]>([]);
   const ready = useRef(false);
   const toastKey = useRef(0);
 
   useEffect(() => {
     const s = load();
     const browserLang: Lang = navigator.language?.toLowerCase().startsWith("tr") ? "tr" : "en";
-    const { earned: e, opened: o, seenAt: sa, clearedAt: ca, ...saved } = s;
+    const { earned: e, opened: o, seenAt: sa, clearedAt: ca, bought: b, extras: x, ...saved } = s;
     const next: Prefs = {
       ...defaultPrefs,
       reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -130,17 +143,19 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
     if (o) setOpened(o);
     if (sa) setSeenAt(sa);
     if (ca) setClearedAt(ca);
+    if (b) setBought(b);
+    if (x) setExtras(x);
     ready.current = true;
   }, []);
 
   useEffect(() => {
     if (!ready.current) return;
     try {
-      localStorage.setItem(STORE, JSON.stringify({ ...prefs, earned, opened, seenAt, clearedAt }));
+      localStorage.setItem(STORE, JSON.stringify({ ...prefs, earned, opened, seenAt, clearedAt, bought, extras }));
     } catch {
       /* storage unavailable: settings just won't persist */
     }
-  }, [prefs, earned, opened, seenAt, clearedAt]);
+  }, [prefs, earned, opened, seenAt, clearedAt, bought, extras]);
 
   useEffect(() => {
     const d = document.documentElement;
@@ -248,6 +263,8 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
         setOpened([]);
         setSeenAt("");
         setClearedAt("");
+        setBought([]);
+        setExtras([]);
         sound.setMusic(false);
         sound.sfx = true;
         sound.setVolume(defaultPrefs.volume / 10);
@@ -266,8 +283,17 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       },
       user,
       setUser,
+      bought,
+      extras,
+      buy: (p) => {
+        setBought((b) => (b.includes(p.id) ? b : [...b, p.id]));
+        // A game from the live search isn't in the catalog: keep its data so it stays in the library.
+        if (!projects.some((x) => x.id === p.id)) setExtras((x) => (x.some((y) => y.id === p.id) ? x : [...x, p]));
+        award("shopper");
+      },
+      owns: (p) => p.owned !== false || bought.includes(p.id),
     }),
-    [prefs, setPref, setLang, earned, award, toasts, opened, markOpened, seenAt, clearedAt, user],
+    [prefs, setPref, setLang, earned, award, toasts, opened, markOpened, seenAt, clearedAt, user, bought, extras],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -292,6 +318,45 @@ export function useNotifications() {
     const unread = list.filter((n) => !seenAt || n.at > seenAt).length;
     return { list, unread };
   }, [earned, seenAt, clearedAt]);
+}
+
+/** Games the visitor owns: latest purchases first (like the console's recently added), then the starting library. */
+export function useLibrary() {
+  const { bought, extras } = useConsole();
+  return useMemo(() => {
+    const find = (id: string) => projects.find((p) => p.id === id && p.owned === false) ?? extras.find((p) => p.id === id);
+    const recent = [...bought].reverse().flatMap((id) => find(id) ?? []);
+    return [...recent, ...projects.filter((p) => p.owned !== false)];
+  }, [bought, extras]);
+}
+
+/**
+ * Store search beyond the synced catalog, through /api/games (IGDB, on the server). Debounced; games already in the
+ * catalog are left out. Comes back empty where there is no server (the single-file preview) or IGDB is unreachable.
+ */
+export function useStoreSearch(q: string) {
+  const term = q.trim();
+  const [state, setState] = useState<{ games: Project[]; loading: boolean }>({ games: [], loading: false });
+  useEffect(() => {
+    if (term.length < 2) return setState({ games: [], loading: false });
+    setState((s) => ({ ...s, loading: true }));
+    const ctrl = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/games?q=${encodeURIComponent(term)}`, { signal: ctrl.signal });
+        const { games } = (await res.json()) as { games: Project[] };
+        const known = new Set(projects.map((p) => p.id));
+        setState({ games: games.filter((g) => !known.has(g.id)), loading: false });
+      } catch {
+        if (!ctrl.signal.aborted) setState({ games: [], loading: false });
+      }
+    }, 350);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [term]);
+  return state;
 }
 
 export function useConsole() {

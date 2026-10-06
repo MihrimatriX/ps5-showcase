@@ -43,6 +43,7 @@ export interface Project {
   /** Hours spent building it, shown as play time. */
   hours: number;
   trophies: ProjectTrophy[];
+  /** demo: trailer or live demo, repo: store page or source code. */
   links: { demo?: string; repo?: string };
   /** Optional real images (put files in public/ and use "/projects/x.jpg"). Generated art is used when missing. */
   cover?: string;
@@ -50,6 +51,26 @@ export interface Project {
   screenshots?: string[];
   /** true while the entry is placeholder content. */
   sample?: boolean;
+  /** YouTube video id of the trailer that plays behind the key art. */
+  trailer?: string;
+  /** Critic + user score, 0..100. */
+  rating?: number;
+  /** Store price in USD; games without one are not for sale. */
+  price?: number;
+  /** false for store-only games the visitor hasn't bought yet. Missing means owned. */
+  owned?: boolean;
+}
+
+/** A public GitHub repository, shown on the recruiter's profile. */
+export interface Repo {
+  name: string;
+  description: string;
+  url: string;
+  homepage?: string;
+  language?: string;
+  stars: number;
+  topics: string[];
+  pushedAt: string;
 }
 
 export interface MediaItem {
@@ -79,7 +100,7 @@ export interface Achievement {
 }
 
 export interface Social {
-  id: "github" | "linkedin" | "mail" | "x" | "blog" | "cv";
+  id: "github" | "linkedin" | "instagram" | "mail" | "x" | "blog" | "cv";
   label: string;
   handle: string;
   url: string;
@@ -92,14 +113,17 @@ export interface Profile {
   title: L;
   location: L;
   about: L;
-  /** Years of experience, shown as the profile level. */
-  level: number;
+  /** Years of experience, shown as the profile level. Leave out to hide the level. */
+  level?: number;
   /** Progress to the next level, 0..100. */
-  levelProgress: number;
+  levelProgress?: number;
   experience: { company: string; role: L; period: string; summary: L }[];
-  skills: { name: string; value: number }[];
+  /** Technologies by area, shown as tags. */
+  skills: { group: L; items: string[] }[];
   education: { school: string; degree: L; period: string }[];
   languages: { name: L; level: L }[];
+  /** Profile photo URL; the initial is shown without one. */
+  avatar?: string;
   cvUrl?: string;
   sample?: boolean;
 }

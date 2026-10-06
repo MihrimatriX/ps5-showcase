@@ -6,9 +6,9 @@ import { InputProvider, activity, rumble } from "@/lib/input";
 import { sound } from "@/lib/sound";
 import type { Project } from "@/lib/types";
 import { CoverArt } from "./CoverArt";
-import { ControlCenter, CreateMenu, Dimmer, LinkSplash, type CCAction } from "./Overlays";
+import { ControlCenter, CreateMenu, Dimmer, LinkSplash, VideoPlayer, type CCAction } from "./Overlays";
 import { Home, initialHome, type HomeNav, type HomeState } from "./screens/Home";
-import { GameHub, LibraryPage, ProfilePage, TrophiesPage, type PageNav } from "./screens/Pages";
+import { GameHub, LibraryPage, ProfilePage, StorePage, TrophiesPage, type PageNav } from "./screens/Pages";
 import { SearchScreen } from "./screens/Search";
 import { SettingsApp } from "./screens/Settings";
 import { BootScreen, OffScreen, UserSelect } from "./screens/System";
@@ -23,6 +23,7 @@ type Screen =
   | { name: "profile" }
   | { name: "trophies" }
   | { name: "library" }
+  | { name: "store" }
   | { name: "settings" }
   | { name: "search" };
 
@@ -52,6 +53,7 @@ function Console() {
   const [create, setCreate] = useState(false);
   const [dim, setDim] = useState(false);
   const [splash, setSplash] = useState<Splash | null>(null);
+  const [video, setVideo] = useState<{ id: string; title: string } | null>(null);
   const [launch, setLaunch] = useState<Launch | null>(null);
   const [screenKey, setScreenKey] = useState(0);
   const timers = useRef<number[]>([]);
@@ -160,12 +162,16 @@ function Console() {
       case "profile":
       case "trophies":
       case "library":
+      case "store":
       case "settings":
       case "search":
         sound.select();
         return go({ name: n.to });
       case "link":
         return openLink(n.url, n.title);
+      case "video":
+        sound.select();
+        return setVideo({ id: n.id, title: n.title });
       case "cc":
         sound.select();
         return setCc({});
@@ -182,6 +188,12 @@ function Console() {
         return go({ name: "trophies" });
       case "contact":
         return setCc({ startIn: "contact" });
+      case "search":
+        sound.select();
+        return go({ name: "search" });
+      case "video":
+        sound.select();
+        return setVideo({ id: n.id, title: n.title });
       case "cc":
         sound.select();
         return setCc({});
@@ -278,6 +290,9 @@ function Console() {
     case "library":
       view = <LibraryPage onNav={onPageNav} />;
       break;
+    case "store":
+      view = <StorePage onNav={onPageNav} />;
+      break;
     case "settings":
       view = (
         <SettingsApp
@@ -316,6 +331,7 @@ function Console() {
       {cc && <ControlCenter current={current} startIn={cc.startIn} onClose={() => setCc(null)} onAction={onCC} />}
       {create && <CreateMenu title={current ? current.title : "AFU Console"} onClose={() => setCreate(false)} />}
       {splash && <LinkSplash {...splash} onClose={() => setSplash(null)} />}
+      {video && <VideoPlayer {...video} onClose={() => setVideo(null)} />}
       <TrophyToasts />
       {dim && (
         <Dimmer

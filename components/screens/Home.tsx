@@ -1,15 +1,16 @@
 "use client";
 /** The home screen: Games / Media tabs, the tile row, the hero area and the cards below it. */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { repos } from "@/content/github";
 import { achievements, media, profile, projects, socials } from "@/content/portfolio";
-import { useConsole } from "@/lib/console";
+import { consoleTrophies, useConsole, useLibrary } from "@/lib/console";
 import { pick, type Key } from "@/lib/i18n";
 import { useLayer, useSwipe, type Action } from "@/lib/input";
 import { sound } from "@/lib/sound";
 import type { Achievement, MediaItem, Project, Social } from "@/lib/types";
 import { CoverArt } from "../CoverArt";
 import { Icon, TrophyIcon } from "../Icons";
-import { AmbientBg, Avatar, Clock, Logo, ProgressRing, SampleBadge, projectProgress } from "../ui";
+import { AmbientBg, Avatar, Clock, Logo, ProgressRing, SampleBadge, StatusChip, Trailer, formatPrice, projectProgress } from "../ui";
 
 export type Tab = "games" | "media";
 export type Zone = "top" | "tiles" | "actions" | "cards";
@@ -18,6 +19,7 @@ export type HomeState = { tab: Tab; idx: Record<Tab, number>; zone: Zone; top: n
 export const initialHome: HomeState = { tab: "games", idx: { games: 1, media: 0 }, zone: "tiles", top: 0, act: 0, card: 0 };
 
 export type Tile =
+  | { kind: "store"; key: string }
   | { kind: "explore"; key: string }
   | { kind: "project"; key: string; p: Project }
   | { kind: "trophies"; key: string }
@@ -30,25 +32,43 @@ export type HomeNav =
   | { to: "profile" }
   | { to: "trophies" }
   | { to: "library" }
+  | { to: "store" }
+  | { to: "video"; id: string; title: string }
   | { to: "link"; url: string; title: string; sample?: boolean }
   | { to: "search" }
   | { to: "settings" }
   | { to: "cc" };
 
-const gamesTiles: Tile[] = [
-  { kind: "explore", key: "explore" },
-  ...projects.map((p) => ({ kind: "project" as const, key: `p-${p.id}`, p })),
-  { kind: "trophies", key: "trophies" },
-  { kind: "library", key: "library" },
-];
-const mediaTiles: Tile[] = [
-  ...media.map((m) => ({ kind: "media" as const, key: `m-${m.id}`, m })),
-  ...socials.map((s) => ({ kind: "social" as const, key: `s-${s.id}`, s })),
-];
+/** Store games worth showing first: not owned yet, best rated (catalog order) before upcoming. */
+const storePicks = (owns: (p: Project) => boolean) => projects.filter((p) => p.price && !owns(p));
+
+/** The CV (Explore tile, CV link) is only for the recruiter; everyone else gets a console. */
+function useTiles(): Record<Tab, Tile[]> {
+  const { user } = useConsole();
+  const library = useLibrary();
+  return useMemo(() => {
+    const recruiter = user === "recruiter";
+    const hasStore = projects.some((p) => p.price);
+    return {
+      games: [
+        ...(hasStore ? [{ kind: "store" as const, key: "store" }] : []),
+        ...(recruiter ? [{ kind: "explore" as const, key: "explore" }] : []),
+        ...library.map((p) => ({ kind: "project" as const, key: `p-${p.id}`, p })),
+        { kind: "trophies", key: "trophies" },
+        { kind: "library", key: "library" },
+      ],
+      media: [
+        ...media.map((m) => ({ kind: "media" as const, key: `m-${m.id}`, m })),
+        ...socials.filter((s) => recruiter || s.id !== "cv").map((s) => ({ kind: "social" as const, key: `s-${s.id}`, s })),
+      ],
+    };
+  }, [user, library]);
+}
 
 const socialColors: Record<Social["id"], [string, string]> = {
   github: ["#1f2937", "#0b0f16"],
   linkedin: ["#0a66c2", "#063a70"],
+  instagram: ["#c13584", "#4c1d95"],
   mail: ["#0f766e", "#053a36"],
   x: ["#27272a", "#09090b"],
   blog: ["#7c3aed", "#2e1065"],
@@ -85,8 +105,17 @@ function TileFace({ tile }: { tile: Tile }) {
         </span>
       );
     }
-    case "explore":
+    case "store":
       return (
+        <span className="tile-sys sys-store">
+          <Icon name="bag" />
+        </span>
+      );
+    case "explore":
+      // The recruiter's way into the profile: the owner's photo, like a profile tile.
+      return profile.avatar ? (
+        <img className="art-img tile-art" src={profile.avatar} alt="" draggable={false} />
+      ) : (
         <span className="tile-sys sys-explore">
           <Icon name="compass" />
         </span>
@@ -114,6 +143,8 @@ function tileLabel(tile: Tile, lang: "tr" | "en", t: (k: Key) => string) {
       return pick(lang, tile.m.title);
     case "social":
       return tile.s.label;
+    case "store":
+      return t("store");
     case "explore":
       return t("explore");
     case "trophies":
@@ -134,6 +165,7 @@ function HeroBg({ tile }: { tile: Tile }) {
       {layers.map((l, i) => (
         <div key={l.key} className={`hero-layer ${i === layers.length - 1 ? "is-top" : ""}`}>
           <HeroArt tile={l} />
+          {i === layers.length - 1 && l.kind === "project" && <Trailer id={l.p.trailer} />}
         </div>
       ))}
       <div className="hero-shade" />
@@ -147,6 +179,10 @@ function HeroArt({ tile }: { tile: Tile }) {
       return <CoverArt src={tile.p.hero ?? tile.p.cover} seed={tile.p.id} motif={tile.p.motif} palette={tile.p.palette} className="hero-art" animated />;
     case "media":
       return <CoverArt src={tile.m.image} seed={tile.m.id} motif={tile.m.motif} palette={tile.m.palette} className="hero-art" animated />;
+    case "store": {
+      const p = projects.find((x) => x.owned === false);
+      return p ? <CoverArt src={p.hero ?? p.cover} seed={p.id} motif={p.motif} palette={p.palette} className="hero-art" animated /> : <AmbientBg />;
+    }
     case "social": {
       const [a, b] = socialColors[tile.s.id];
       return (
@@ -163,11 +199,16 @@ function HeroArt({ tile }: { tile: Tile }) {
 type Card = { key: string; title: string; body: string; tier?: Achievement["tier"]; art?: { src?: string; seed: string; motif: Project["motif"]; palette: Project["palette"] }; icon?: string; ring?: number };
 
 export function Home({ state, setState, onNav }: { state: HomeState; setState: (fn: (s: HomeState) => HomeState) => void; onNav: (n: HomeNav) => void }) {
-  const { t, lang, award, gameThemes } = useConsole();
-  const tiles = state.tab === "games" ? gamesTiles : mediaTiles;
+  const { t, lang, award, gameThemes, user, owns, earned } = useConsole();
+  const tiles = useTiles()[state.tab];
   const idx = Math.min(state.idx[state.tab], tiles.length - 1);
   const tile = tiles[idx];
   const [menu, setMenu] = useState<number | null>(null);
+
+  // Warm the neighbours' key art so the hero crossfade never waits on the network.
+  useEffect(() => {
+    for (const n of [tiles[idx - 1], tiles[idx + 1]]) if (n?.kind === "project" && n.p.hero) new Image().src = n.p.hero;
+  }, [tiles, idx]);
 
   useEffect(() => {
     if (state.tab === "media") award("reader");
@@ -190,6 +231,8 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
     switch (tile.kind) {
       case "project":
         return { label: t("play"), nav: { to: "game", project: tile.p } };
+      case "store":
+        return { label: t("open"), nav: { to: "store" } };
       case "explore":
         return { label: t("view"), nav: { to: "profile" } };
       case "trophies":
@@ -207,8 +250,8 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
     if (tile.kind !== "project") return [];
     const p = tile.p;
     const items: { label: string; icon: string; nav: HomeNav }[] = [{ label: t("details"), icon: "gamepad", nav: { to: "game", project: p } }];
-    if (p.links.demo) items.push({ label: t("demo"), icon: "play", nav: { to: "link", url: p.links.demo, title: p.title, sample: p.sample } });
-    if (p.links.repo) items.push({ label: t("source"), icon: "github", nav: { to: "link", url: p.links.repo, title: p.title, sample: p.sample } });
+    if (p.links.demo) items.push({ label: t("demo"), icon: "play", nav: p.trailer ? { to: "video", id: p.trailer, title: p.title } : { to: "link", url: p.links.demo, title: p.title, sample: p.sample } });
+    if (p.links.repo) items.push({ label: t("source"), icon: "external", nav: { to: "link", url: p.links.repo, title: p.title, sample: p.sample } });
     return items;
   }, [tile, t]);
 
@@ -223,36 +266,56 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
         body: pick(lang, f.body),
         art: { src: p.screenshots?.[i], seed: p.id, motif: p.motif, palette: p.palette },
       }));
-      items.push({
-        key: "trophies",
-        title: t("trophies"),
-        body: `${p.trophies.filter((x) => x.earned).length}/${p.trophies.length} · ${p.hours} ${t("hours")}`,
-        ring: projectProgress(p),
-      });
+      if (p.trophies.length)
+        items.push({
+          key: "trophies",
+          title: t("trophies"),
+          body: `${p.trophies.filter((x) => x.earned).length}/${p.trophies.length} · ${p.hours} ${t("hours")}`,
+          ring: projectProgress(p),
+        });
       return { title: t("activities"), items };
     }
     if (tile.kind === "explore")
+      return profile.experience.length
+        ? {
+            title: t("profile.experience"),
+            items: profile.experience.map((e, i) => ({ key: `e${i}`, title: `${pick(lang, e.role)}`, body: `${e.company} · ${e.period}`, icon: "users" })),
+          }
+        : {
+            title: t("profile.repos"),
+            items: repos.slice(0, 4).map((r) => ({ key: r.name, title: r.name, body: [r.language, r.stars ? `★ ${r.stars}` : ""].filter(Boolean).join(" · "), icon: "github" })),
+          };
+    if (tile.kind === "store")
       return {
-        title: t("profile.experience"),
-        items: profile.experience.map((e, i) => ({ key: `e${i}`, title: `${pick(lang, e.role)}`, body: `${e.company} · ${e.period}`, icon: "users" })),
+        title: t("store.featured"),
+        items: storePicks(owns)
+          .slice(0, 4)
+          .map((p) => ({ key: p.id, title: p.title, body: formatPrice(p.price!, lang), art: { src: p.hero ?? p.cover, seed: p.id, motif: p.motif, palette: p.palette } })),
       };
+    // Certificates are CV material: the recruiter sees them, everyone else sees their console trophies.
     if (tile.kind === "trophies")
-      return {
-        title: t("profile.achievements"),
-        items: achievements.slice(0, 4).map((a) => ({ key: a.id, title: pick(lang, a.name), body: `${a.issuer} · ${a.date}`, tier: a.tier })),
-      };
+      return user === "recruiter" && achievements.length
+        ? {
+            title: t("profile.achievements"),
+            items: achievements.slice(0, 4).map((a) => ({ key: a.id, title: pick(lang, a.name), body: `${a.issuer} · ${a.date}`, tier: a.tier })),
+          }
+        : {
+            title: t("trophy.console"),
+            items: consoleTrophies.slice(0, 4).map((x) => ({ key: x.id, title: pick(lang, x.name), body: pick(lang, x.detail), tier: x.tier })),
+          };
     return null;
-  }, [tile, lang, t]);
+  }, [tile, lang, t, user, owns]);
 
   const cardCount = cards?.items.length ?? 0;
-  const cardNav: HomeNav = tile.kind === "explore" ? { to: "profile" } : tile.kind === "trophies" ? { to: "trophies" } : primary.nav;
+  const cardNav: HomeNav = tile.kind === "explore" ? { to: "profile" } : tile.kind === "trophies" ? { to: "trophies" } : tile.kind === "store" ? { to: "store" } : primary.nav;
 
   const topItems: { id: string; run: () => void }[] = [
     { id: "games", run: () => switchTab("games") },
     { id: "media", run: () => switchTab("media") },
     { id: "search", run: () => onNav({ to: "search" }) },
     { id: "settings", run: () => onNav({ to: "settings" }) },
-    { id: "profile", run: () => onNav({ to: "profile" }) },
+    // The avatar opens the CV for the recruiter and the trophy list for everyone else.
+    { id: "profile", run: () => onNav(user === "recruiter" ? { to: "profile" } : { to: "trophies" }) },
   ];
 
   function switchTab(tab: Tab) {
@@ -376,22 +439,53 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
   let heroTitle: ReactNode = null;
   let heroSide: ReactNode = null;
   let heroText: string | null = null;
+  let heroFacts: ReactNode = null;
   switch (tile.kind) {
     case "project": {
       const p = tile.p;
-      heroTitle = <Logo text={p.title} spec={p.logo} className="hero-logo" />;
-      heroMeta = p.sample ? <SampleBadge show /> : null;
-      heroSide = (
+      heroTitle = <Logo text={p.title} spec={p.logo} className="hero-logo hero-logo-game" />;
+      heroMeta = (
+        <>
+          <span>{pick(lang, p.genre)}</span>
+          <span className="dot" />
+          <span>{p.year}</span>
+          {p.rating && (
+            <span className="hero-rating">
+              <Icon name="star" />
+              {p.rating}
+            </span>
+          )}
+          {p.status === "dev" && <StatusChip status={p.status} />}
+          <SampleBadge show={p.sample} />
+        </>
+      );
+      heroText = pick(lang, p.tagline);
+      // The game's credits under the buttons: developer, then release date / publisher / modes from the synced facts.
+      heroFacts = (
+        <dl className="hero-facts">
+          <div>
+            <dt>{t("role")}</dt>
+            <dd>{pick(lang, p.role)}</dd>
+          </div>
+          {p.features.slice(0, 3).map((f) => (
+            <div key={f.title.en}>
+              <dt>{pick(lang, f.title)}</dt>
+              <dd>{pick(lang, f.body)}</dd>
+            </div>
+          ))}
+        </dl>
+      );
+      heroSide = p.trophies.length ? (
         <div className="hero-side">
           <ProgressRing value={projectProgress(p)} size="sm" />
         </div>
-      );
+      ) : null;
       break;
     }
     case "explore":
       heroTitle = (
         <div className="hero-profile">
-          <Avatar name={profile.name} size="lg" ring />
+          <Avatar name={profile.name} src={profile.avatar} size="lg" ring />
           <Logo text={profile.name} spec={{ font: "space", caps: true, gradient: ["#ffffff", "#93c5fd"] }} className="hero-logo" />
         </div>
       );
@@ -400,14 +494,21 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
           <span>{pick(lang, profile.title)}</span>
           <span className="dot" />
           <span>{pick(lang, profile.location)}</span>
-          <SampleBadge show={profile.sample} />
         </>
       );
       heroText = pick(lang, profile.about);
       break;
+    case "store": {
+      const picks = storePicks(owns);
+      heroTitle = <Logo text={t("store")} spec={{ font: "sans" }} className="hero-logo hero-logo-sys" />;
+      heroMeta = picks[0] ? <span>{picks[0].title}</span> : null;
+      heroText = t("store.demo");
+      break;
+    }
     case "trophies": {
       const counts = { platinum: 0, gold: 0, silver: 0, bronze: 0 };
-      achievements.forEach((a) => counts[a.tier]++);
+      if (user === "recruiter") achievements.forEach((a) => counts[a.tier]++);
+      consoleTrophies.forEach((x) => earned[x.id] && counts[x.tier]++);
       projects.forEach((p) => p.trophies.forEach((x) => x.earned && counts[x.tier]++));
       heroTitle = <Logo text={t("trophies")} spec={{ font: "sans" }} className="hero-logo hero-logo-sys" />;
       heroMeta = (
@@ -420,12 +521,12 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
           ))}
         </span>
       );
-      heroText = t("profile.achievements");
+      heroText = user === "recruiter" && achievements.length ? t("profile.achievements") : t("trophy.console");
       break;
     }
     case "library":
       heroTitle = <Logo text={t("library")} spec={{ font: "sans" }} className="hero-logo hero-logo-sys" />;
-      heroMeta = <span>{projects.length} {lang === "tr" ? "oyun" : "games"}</span>;
+      heroMeta = <span>{tiles.filter((x) => x.kind === "project").length} {lang === "tr" ? "oyun" : "games"}</span>;
       heroText = null;
       break;
     case "media":
@@ -473,7 +574,7 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
               </button>
             ))}
             <button className={`icon-btn avatar-btn ${focusClass("top", 4, state.top)}`} aria-label={profile.name} onClick={() => onNav({ to: "profile" })} {...hover(() => setState((s) => ({ ...s, zone: "top", top: 4 })))}>
-              <Avatar name={profile.name} size="sm" />
+              <Avatar name={profile.name} src={profile.avatar} size="sm" />
             </button>
             <Clock />
           </div>
@@ -525,6 +626,7 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
             )}
             {heroSide}
           </div>
+          {heroFacts}
         </section>
 
         {cards && (

@@ -3,6 +3,13 @@ import type { ReactElement } from "react";
 import type { Tier } from "@/lib/types";
 
 const paths: Record<string, ReactElement> = {
+  bag: (
+    <>
+      <path d="M5 8h14l-1.2 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8z" />
+      <path d="M9 10V7a3 3 0 0 1 6 0v3" />
+    </>
+  ),
+  star: <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />,
   search: (
     <>
       <circle cx="10.5" cy="10.5" r="6.5" />
@@ -75,6 +82,13 @@ const paths: Record<string, ReactElement> = {
     <>
       <rect x="3" y="3" width="18" height="18" rx="3" />
       <path d="M7.5 10.5V17M7.5 7.2v.1M11.5 17v-6.5M11.5 13c0-1.6 1.1-2.6 2.5-2.6s2.5 1 2.5 2.6v4" />
+    </>
+  ),
+  instagram: (
+    <>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <path d="M17.2 6.8v.1" />
     </>
   ),
   mail: (

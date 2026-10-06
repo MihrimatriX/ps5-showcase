@@ -61,6 +61,10 @@ export function useScrollToFocus(container: RefObject<HTMLElement | null>, pos: 
   useEffect(() => {
     const root = container.current;
     if (!root) return;
+    // Only keys and pads follow the focus. A mouse focuses on hover, and scrolling the hovered item away would put
+    // another one under the cursor, which would scroll again: the page would run off by itself.
+    const m = document.documentElement.dataset.input;
+    if (m === "pointer" || m === "touch") return;
     const el = root.querySelector<HTMLElement>(`[data-nav="${pos.r}-${pos.c}"]`);
     if (!el) return;
     if (pos.r === 0) root.scrollTo({ top: 0, behavior: "smooth" });
