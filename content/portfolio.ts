@@ -5,6 +5,7 @@
 import type { Achievement, MediaItem, Profile, Social } from "@/lib/types";
 import { games } from "./games";
 import { githubAvatar } from "./github";
+export { movies } from "./movies";
 
 // From the GitHub profile and its README (github.com/MihrimatriX).
 export const profile: Profile = {

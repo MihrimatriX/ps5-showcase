@@ -1,7 +1,7 @@
 "use client";
 /** Control center, the Create menu, the idle dimmer and the "opening a link" splash. */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { profile, projects, socials } from "@/content/portfolio";
+import { movies, profile, projects, socials } from "@/content/portfolio";
 import { consoleTrophies, useConsole, useNotifications, useNowPlaying } from "@/lib/console";
 import { pick } from "@/lib/i18n";
 import { useLayer } from "@/lib/input";
@@ -76,8 +76,10 @@ export function ControlCenter({ current, onClose, onAction, startIn }: { current
     setTimeout(onClose, 220);
   };
 
-  const recent = useMemo(() => c.opened.map((id) => projects.find((p) => p.id === id)).filter(Boolean) as Project[], [c.opened]);
-  const musicName = playing.theme ? `${projects.find((p) => p.id === playing.theme)?.title ?? ""} · ${x("Tema", "Theme")}` : pick(lang, tracks[playing.track].name);
+  // Games and movies both open in the hub, so the switcher and the theme name look in both catalogs.
+  const titles = [...projects, ...movies];
+  const recent = useMemo(() => c.opened.map((id) => titles.find((p) => p.id === id)).filter(Boolean) as Project[], [c.opened]);
+  const musicName = playing.theme ? `${titles.find((p) => p.id === playing.theme)?.title ?? ""} · ${x("Tema", "Theme")}` : pick(lang, tracks[playing.track].name);
 
   const items: Record<IconId, PItem[]> = {
     home: [],

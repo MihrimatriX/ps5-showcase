@@ -108,6 +108,7 @@ Ayarlar tarayıcıda (`localStorage`) saklanır ve bir sonraki ziyarette geri ge
 | Dosya | Kaynak | Güncelleme |
 | --- | --- | --- |
 | `content/games.ts` | IGDB: sahip olunan oyunlar, mağaza kataloğu (en yüksek puanlılar ve yakında çıkacaklar) | `npm run sync:games` |
+| `content/movies.ts` | TMDB: Filmler sekmesi, sahip olunan filmler ve film mağazası (en yüksek puanlılar ve yakında vizyona girecekler) | `npm run sync:movies` |
 | `content/github.ts` | GitHub'daki herkese açık depolar (fork ve arşivler hariç) | `npm run sync:github` |
 | `content/portfolio.ts` | CV, medya, sosyal bağlantılar | Elle |
 
@@ -117,6 +118,7 @@ Her iki dosya da üretilir ve tip denetiminden geçer; elle düzenlenmez. Anahta
 CLIENT_ID=...       # dev.twitch.tv/console üzerinden bir uygulama (IGDB, Twitch kimliğiyle çalışır)
 CLIENT_SECRET=...
 GITHUB_TOKEN=...    # isteğe bağlı; yalnızca saatlik 60 istek sınırını kaldırır
+TMDB_TOKEN=...      # themoviedb.org/settings/api → "API Read Access Token"
 ```
 
 Sahip olunan oyunları değiştirmek için `scripts/sync-igdb.mjs` içindeki `TITLES` listesini düzenleyip senkronu çalıştır.
@@ -128,6 +130,11 @@ arar: `npm run sync:store` en çok puanlanan 3000 PS5/PS4 oyununu `preview/store
 deploy'da ve her gün yeniler (repo'nun Actions secret'larına `CLIENT_ID` ve `CLIENT_SECRET` eklenmeli).
 IGDB erişimi ve oyun eşlemesi `lib/igdb.ts` içinde; senkron betiği ve rota aynı kodu kullanır.
 Arayüzde gösterilen veriler IGDB'den gelir ("Powered by IGDB.com", Ayarlar → Sistem).
+
+**Filmler:** Filmler sekmesi oyunlarla aynı yapıyı kullanır: film mağazası, sahip olunan filmler, film kütüphanesi ve film
+sayfası (fragman, yönetmen, oyuncular, Türkçe özet). Filmler `kind: "movie"` alanlı birer `Project`'tir; TMDB erişimi ve
+eşleme `lib/tmdb.ts` içinde, canlı arama `/api/movies?q=` rotasında. Sahip olunan filmler `scripts/sync-tmdb.mjs` içindeki
+`TITLES` listesinden gelir. Ayarlar → Sistem'de TMDB'nin istediği atıf satırı bulunur.
 
 **Demo mağaza:** fiyatlar temsilidir (IGDB fiyat vermez; çıkış tarihine göre 29,99 / 49,99 / 69,99 $), ödeme bilgisi
 hiç istenmez. Satın alınan oyunlar bu tarayıcıda saklanır ve ana ekranın başına, kütüphaneye ve depolamaya eklenir.
@@ -155,6 +162,8 @@ npm run typecheck
 npm run build
 npm run preview    # preview/index.html: kurulum gerektirmeyen tek dosyalık sürüm
 npm run sync:games  # IGDB'den oyunları ve mağazayı yenile
+npm run sync:movies # TMDB'den filmleri ve film mağazasını yenile
+npm run sync:store  # Pages için mağaza anlık görüntüleri (preview/store.json, preview/movies.json)
 npm run sync:github # GitHub depolarını yenile
 ```
 

@@ -1,10 +1,10 @@
 "use client";
-/** The home screen: Games / Media tabs, the tile row, the hero area and the cards below it. */
+/** The home screen: Games / Movies / Media tabs, the tile row, the hero area and the cards below it. */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { repos } from "@/content/github";
 import { achievements, media, profile, projects, socials } from "@/content/portfolio";
-import { consoleTrophies, useConsole, useLibrary } from "@/lib/console";
-import { pick, type Key } from "@/lib/i18n";
+import { catalogs, consoleTrophies, useConsole, useLibrary, type Shelf } from "@/lib/console";
+import { forMovie, pick, type Key } from "@/lib/i18n";
 import { useLayer, useSwipe, type Action } from "@/lib/input";
 import { sound } from "@/lib/sound";
 import type { Achievement, MediaItem, Project, Social } from "@/lib/types";
@@ -12,18 +12,20 @@ import { CoverArt } from "../CoverArt";
 import { Icon, TrophyIcon } from "../Icons";
 import { AmbientBg, Avatar, Clock, Logo, ProgressRing, SampleBadge, StatusChip, Trailer, formatPrice, projectProgress } from "../ui";
 
-export type Tab = "games" | "media";
+export type Tab = Shelf | "media";
+/** Left to right in the top bar; L1 / R1 step through them. */
+const TABS: Tab[] = ["games", "movies", "media"];
 export type Zone = "top" | "tiles" | "actions" | "cards";
 export type HomeState = { tab: Tab; idx: Record<Tab, number>; zone: Zone; top: number; act: number; card: number };
 
-export const initialHome: HomeState = { tab: "games", idx: { games: 1, media: 0 }, zone: "tiles", top: 0, act: 0, card: 0 };
+export const initialHome: HomeState = { tab: "games", idx: { games: 1, movies: 1, media: 0 }, zone: "tiles", top: 0, act: 0, card: 0 };
 
 export type Tile =
-  | { kind: "store"; key: string }
+  | { kind: "store"; key: string; shelf: Shelf }
   | { kind: "explore"; key: string }
   | { kind: "project"; key: string; p: Project }
   | { kind: "trophies"; key: string }
-  | { kind: "library"; key: string }
+  | { kind: "library"; key: string; shelf: Shelf }
   | { kind: "media"; key: string; m: MediaItem }
   | { kind: "social"; key: string; s: Social };
 
@@ -31,38 +33,46 @@ export type HomeNav =
   | { to: "game"; project: Project }
   | { to: "profile" }
   | { to: "trophies" }
-  | { to: "library" }
-  | { to: "store" }
+  | { to: "library"; shelf: Shelf }
+  | { to: "store"; shelf: Shelf }
   | { to: "video"; id: string; title: string }
   | { to: "link"; url: string; title: string; sample?: boolean }
   | { to: "search" }
   | { to: "settings" }
   | { to: "cc" };
 
-/** Store games worth showing first: not owned yet, best rated (catalog order) before upcoming. */
-const storePicks = (owns: (p: Project) => boolean) => projects.filter((p) => p.price && !owns(p));
+/** Store titles worth showing first: not owned yet, best rated (catalog order) before upcoming. */
+const storePicks = (owns: (p: Project) => boolean, shelf: Shelf) => catalogs[shelf].filter((p) => p.price && !owns(p));
+
+/** A store tile when that store has anything for sale. */
+const storeTile = (shelf: Shelf): Tile[] => (catalogs[shelf].some((p) => p.price) ? [{ kind: "store", key: `store-${shelf}`, shelf }] : []);
 
 /** The CV (Explore tile, CV link) is only for the recruiter; everyone else gets a console. */
 function useTiles(): Record<Tab, Tile[]> {
   const { user } = useConsole();
   const library = useLibrary();
+  const films = useLibrary("movies");
   return useMemo(() => {
     const recruiter = user === "recruiter";
-    const hasStore = projects.some((p) => p.price);
     return {
       games: [
-        ...(hasStore ? [{ kind: "store" as const, key: "store" }] : []),
+        ...storeTile("games"),
         ...(recruiter ? [{ kind: "explore" as const, key: "explore" }] : []),
         ...library.map((p) => ({ kind: "project" as const, key: `p-${p.id}`, p })),
         { kind: "trophies", key: "trophies" },
-        { kind: "library", key: "library" },
+        { kind: "library", key: "library-games", shelf: "games" },
+      ],
+      movies: [
+        ...storeTile("movies"),
+        ...films.map((p) => ({ kind: "project" as const, key: `p-${p.id}`, p })),
+        { kind: "library", key: "library-movies", shelf: "movies" },
       ],
       media: [
         ...media.map((m) => ({ kind: "media" as const, key: `m-${m.id}`, m })),
         ...socials.filter((s) => recruiter || s.id !== "cv").map((s) => ({ kind: "social" as const, key: `s-${s.id}`, s })),
       ],
     };
-  }, [user, library]);
+  }, [user, library, films]);
 }
 
 const socialColors: Record<Social["id"], [string, string]> = {
@@ -129,7 +139,7 @@ function TileFace({ tile }: { tile: Tile }) {
     case "library":
       return (
         <span className="tile-sys sys-library">
-          <Icon name="grid" />
+          <Icon name={tile.shelf === "movies" ? "video" : "grid"} />
         </span>
       );
   }
@@ -144,13 +154,13 @@ function tileLabel(tile: Tile, lang: "tr" | "en", t: (k: Key) => string) {
     case "social":
       return tile.s.label;
     case "store":
-      return t("store");
+      return t(forMovie("store", tile.shelf === "movies"));
     case "explore":
       return t("explore");
     case "trophies":
       return t("trophies");
     case "library":
-      return t("library");
+      return t(forMovie("library", tile.shelf === "movies"));
   }
 }
 
@@ -180,7 +190,7 @@ function HeroArt({ tile }: { tile: Tile }) {
     case "media":
       return <CoverArt src={tile.m.image} seed={tile.m.id} motif={tile.m.motif} palette={tile.m.palette} className="hero-art" animated />;
     case "store": {
-      const p = projects.find((x) => x.owned === false);
+      const p = catalogs[tile.shelf].find((x) => x.owned === false);
       return p ? <CoverArt src={p.hero ?? p.cover} seed={p.id} motif={p.motif} palette={p.palette} className="hero-art" animated /> : <AmbientBg />;
     }
     case "social": {
@@ -227,18 +237,19 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
   }, []);
 
   // ----- what the selected tile offers -----
+  const movie = tile.kind === "project" && tile.p.kind === "movie";
   const primary = useMemo((): { label: string; nav: HomeNav } => {
     switch (tile.kind) {
       case "project":
-        return { label: t("play"), nav: { to: "game", project: tile.p } };
+        return { label: t(forMovie("play", tile.p.kind === "movie")), nav: { to: "game", project: tile.p } };
       case "store":
-        return { label: t("open"), nav: { to: "store" } };
+        return { label: t("open"), nav: { to: "store", shelf: tile.shelf } };
       case "explore":
         return { label: t("view"), nav: { to: "profile" } };
       case "trophies":
         return { label: t("view"), nav: { to: "trophies" } };
       case "library":
-        return { label: t("view"), nav: { to: "library" } };
+        return { label: t("view"), nav: { to: "library", shelf: tile.shelf } };
       case "media":
         return { label: t("read"), nav: { to: "link", url: tile.m.url, title: pick(lang, tile.m.title), sample: tile.m.sample } };
       case "social":
@@ -249,9 +260,10 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
   const moreItems = useMemo((): { label: string; icon: string; nav: HomeNav }[] => {
     if (tile.kind !== "project") return [];
     const p = tile.p;
-    const items: { label: string; icon: string; nav: HomeNav }[] = [{ label: t("details"), icon: "gamepad", nav: { to: "game", project: p } }];
+    const m = p.kind === "movie";
+    const items: { label: string; icon: string; nav: HomeNav }[] = [{ label: t(forMovie("details", m)), icon: m ? "video" : "gamepad", nav: { to: "game", project: p } }];
     if (p.links.demo) items.push({ label: t("demo"), icon: "play", nav: p.trailer ? { to: "video", id: p.trailer, title: p.title } : { to: "link", url: p.links.demo, title: p.title, sample: p.sample } });
-    if (p.links.repo) items.push({ label: t("source"), icon: "external", nav: { to: "link", url: p.links.repo, title: p.title, sample: p.sample } });
+    if (p.links.repo) items.push({ label: t(forMovie("source", m)), icon: "external", nav: { to: "link", url: p.links.repo, title: p.title, sample: p.sample } });
     return items;
   }, [tile, t]);
 
@@ -273,7 +285,7 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
           body: `${p.trophies.filter((x) => x.earned).length}/${p.trophies.length} · ${p.hours} ${t("hours")}`,
           ring: projectProgress(p),
         });
-      return { title: t("activities"), items };
+      return { title: t(forMovie("activities", p.kind === "movie")), items };
     }
     if (tile.kind === "explore")
       return profile.experience.length
@@ -288,7 +300,7 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
     if (tile.kind === "store")
       return {
         title: t("store.featured"),
-        items: storePicks(owns)
+        items: storePicks(owns, tile.shelf)
           .slice(0, 4)
           .map((p) => ({ key: p.id, title: p.title, body: formatPrice(p.price!, lang), art: { src: p.hero ?? p.cover, seed: p.id, motif: p.motif, palette: p.palette } })),
       };
@@ -307,11 +319,10 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
   }, [tile, lang, t, user, owns]);
 
   const cardCount = cards?.items.length ?? 0;
-  const cardNav: HomeNav = tile.kind === "explore" ? { to: "profile" } : tile.kind === "trophies" ? { to: "trophies" } : tile.kind === "store" ? { to: "store" } : primary.nav;
+  const cardNav: HomeNav = tile.kind === "explore" ? { to: "profile" } : tile.kind === "trophies" ? { to: "trophies" } : tile.kind === "store" ? { to: "store", shelf: tile.shelf } : primary.nav;
 
   const topItems: { id: string; run: () => void }[] = [
-    { id: "games", run: () => switchTab("games") },
-    { id: "media", run: () => switchTab("media") },
+    ...TABS.map((tab) => ({ id: tab, run: () => switchTab(tab) })),
     { id: "search", run: () => onNav({ to: "search" }) },
     { id: "settings", run: () => onNav({ to: "settings" }) },
     // The avatar opens the CV for the recruiter and the trophy list for everyone else.
@@ -321,7 +332,7 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
   function switchTab(tab: Tab) {
     if (tab === state.tab) return;
     sound.select();
-    setState((s) => ({ ...s, tab, zone: s.zone === "top" ? "top" : "tiles", top: tab === "games" ? 0 : 1, act: 0, card: 0 }));
+    setState((s) => ({ ...s, tab, zone: s.zone === "top" ? "top" : "tiles", top: TABS.indexOf(tab), act: 0, card: 0 }));
   }
 
   function select(i: number) {
@@ -347,7 +358,10 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
     (a: Action) => {
       if (a === "home") return onNav({ to: "cc" });
       if (a === "triangle") return onNav({ to: "search" });
-      if (a === "l1" || a === "r1") return switchTab(a === "l1" ? "games" : "media");
+      if (a === "l1" || a === "r1") {
+        const n = TABS.indexOf(state.tab) + (a === "l1" ? -1 : 1);
+        return n >= 0 && n < TABS.length && switchTab(TABS[n]);
+      }
       if (a === "options") {
         // Options opens the "…" menu of the selected game, wherever the focus is.
         if (!moreItems.length) return;
@@ -365,10 +379,10 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
       if (zone === "tiles") {
         if (a === "left") select(idx - 1);
         else if (a === "right") select(idx + 1);
-        else if (a === "up") setZone("top", { top: state.tab === "games" ? 0 : 1 });
+        else if (a === "up") setZone("top", { top: TABS.indexOf(state.tab) });
         else if (a === "down") setZone("actions", { act: 0 });
         else if (a === "confirm") run(primary.nav);
-        else if (a === "back" && state.tab === "media") switchTab("games");
+        else if (a === "back" && state.tab !== "games") switchTab("games");
         return;
       }
       if (zone === "actions") {
@@ -464,7 +478,7 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
       heroFacts = (
         <dl className="hero-facts">
           <div>
-            <dt>{t("role")}</dt>
+            <dt>{t(forMovie("role", movie))}</dt>
             <dd>{pick(lang, p.role)}</dd>
           </div>
           {p.features.slice(0, 3).map((f) => (
@@ -499,8 +513,8 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
       heroText = pick(lang, profile.about);
       break;
     case "store": {
-      const picks = storePicks(owns);
-      heroTitle = <Logo text={t("store")} spec={{ font: "sans" }} className="hero-logo hero-logo-sys" />;
+      const picks = storePicks(owns, tile.shelf);
+      heroTitle = <Logo text={t(forMovie("store", tile.shelf === "movies"))} spec={{ font: "sans" }} className="hero-logo hero-logo-sys" />;
       heroMeta = picks[0] ? <span>{picks[0].title}</span> : null;
       heroText = t("store.demo");
       break;
@@ -524,11 +538,17 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
       heroText = user === "recruiter" && achievements.length ? t("profile.achievements") : t("trophy.console");
       break;
     }
-    case "library":
-      heroTitle = <Logo text={t("library")} spec={{ font: "sans" }} className="hero-logo hero-logo-sys" />;
-      heroMeta = <span>{tiles.filter((x) => x.kind === "project").length} {lang === "tr" ? "oyun" : "games"}</span>;
+    case "library": {
+      const films = tile.shelf === "movies";
+      heroTitle = <Logo text={t(forMovie("library", films))} spec={{ font: "sans" }} className="hero-logo hero-logo-sys" />;
+      heroMeta = (
+        <span>
+          {tiles.filter((x) => x.kind === "project").length} {lang === "tr" ? (films ? "film" : "oyun") : films ? "movies" : "games"}
+        </span>
+      );
       heroText = null;
       break;
+    }
     case "media":
       heroTitle = <Logo text={pick(lang, tile.m.title)} spec={{ font: "sans" }} className="hero-logo hero-logo-media" />;
       heroMeta = (
@@ -561,19 +581,19 @@ export function Home({ state, setState, onNav }: { state: HomeState; setState: (
       <div className="home-scroll">
         <header className="topbar">
           <nav className="tabs">
-            {(["games", "media"] as Tab[]).map((tab, i) => (
+            {TABS.map((tab, i) => (
               <button key={tab} className={`tab ${state.tab === tab ? "is-active" : ""} ${focusClass("top", i, state.top)}`} onClick={() => switchTab(tab)} {...hover(() => setState((s) => ({ ...s, zone: "top", top: i })))}>
-                {t(tab === "games" ? "tab.games" : "tab.media")}
+                {t(`tab.${tab}`)}
               </button>
             ))}
           </nav>
           <div className="topbar-right">
             {(["search", "settings"] as const).map((id, k) => (
-              <button key={id} className={`icon-btn ${focusClass("top", k + 2, state.top)}`} aria-label={id === "search" ? t("search.title") : t("settings.title")} onClick={() => onNav({ to: id })} {...hover(() => setState((s) => ({ ...s, zone: "top", top: k + 2 })))}>
+              <button key={id} className={`icon-btn ${focusClass("top", TABS.length + k, state.top)}`} aria-label={id === "search" ? t("search.title") : t("settings.title")} onClick={() => onNav({ to: id })} {...hover(() => setState((s) => ({ ...s, zone: "top", top: TABS.length + k })))}>
                 <Icon name={id === "search" ? "search" : "gear"} />
               </button>
             ))}
-            <button className={`icon-btn avatar-btn ${focusClass("top", 4, state.top)}`} aria-label={profile.name} onClick={() => onNav({ to: "profile" })} {...hover(() => setState((s) => ({ ...s, zone: "top", top: 4 })))}>
+            <button className={`icon-btn avatar-btn ${focusClass("top", TABS.length + 2, state.top)}`} aria-label={profile.name} onClick={() => onNav({ to: "profile" })} {...hover(() => setState((s) => ({ ...s, zone: "top", top: TABS.length + 2 })))}>
               <Avatar name={profile.name} src={profile.avatar} size="sm" />
             </button>
             <Clock />

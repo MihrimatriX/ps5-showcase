@@ -56,19 +56,19 @@ export async function igdb(endpoint: string, query: string): Promise<IgdbGame[]>
 /** A user-typed search turned into an IGDB string literal: no quotes or backslashes to break out of it. */
 export const searchTerm = (q: string) => q.replace(/["\\]/g, "").trim().slice(0, 60);
 
-// Fallback art colors for images IGDB doesn't have.
-const PALETTES: Project["palette"][] = [
+// Fallback art colors for images IGDB doesn't have. Shared with lib/tmdb.ts, like the helpers below.
+export const PALETTES: Project["palette"][] = [
   ["#07060f", "#3b1d8f", "#a78bfa"],
   ["#020617", "#0b3a8a", "#38bdf8"],
   ["#14060f", "#7a1d4a", "#fb7185"],
   ["#03140d", "#0f5132", "#34d399"],
   ["#1a0d03", "#8a4b0b", "#fdba74"],
 ];
-const MOTIFS: Project["motif"][] = ["orbit", "rings", "grid", "circuit", "dunes", "shards", "waves", "city"];
+export const MOTIFS: Project["motif"][] = ["orbit", "rings", "grid", "circuit", "dunes", "shards", "waves", "city"];
 
 const img = (id: string | undefined, size: string) => (id ? `https://images.igdb.com/igdb/image/upload/t_${size}/${id}.jpg` : undefined);
-const both = (s: string): L => ({ tr: s, en: s });
-const firstSentence = (s: string) => (s.match(/^.{20,160}?[.!?](\s|$)/)?.[0] ?? s.slice(0, 140)).trim();
+export const both = (s: string): L => ({ tr: s, en: s });
+export const firstSentence =(s: string) => (s.match(/^.{20,160}?[.!?](\s|$)/)?.[0] ?? s.slice(0, 140)).trim();
 
 // ponytail: IGDB has no prices, so these follow launch-price tiers by age. Illustrative only; the store is a demo.
 function price(date: Date | null) {

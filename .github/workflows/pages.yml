@@ -1,6 +1,7 @@
-# Publishes the single-file build (preview/index.html) to GitHub Pages. Pages has no server for /api/games, so the
-# store searches a snapshot of IGDB (preview/store.json) taken here, refreshed daily. Needs the CLIENT_ID and
-# CLIENT_SECRET repository secrets (Settings → Secrets and variables → Actions).
+# Publishes the single-file build (preview/index.html) to GitHub Pages. Pages has no server for /api/games or
+# /api/movies, so the stores search snapshots of IGDB and TMDB (preview/store.json, preview/movies.json) taken here,
+# refreshed daily along with the Movies tab. Needs the CLIENT_ID, CLIENT_SECRET and TMDB_TOKEN repository secrets
+# (Settings → Secrets and variables → Actions).
 name: Pages
 
 on:
@@ -32,11 +33,20 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Fresh movies for the Movies tab before the page is built; the snapshots go next to the built page.
+      # A missing secret or an IGDB/TMDB outage must not take the site down: the page still deploys, just without
+      # fresh data (the step shows as failed in the run).
+      - run: npm run sync:movies
+        continue-on-error: true
+        env:
+          TMDB_TOKEN: ${{ secrets.TMDB_TOKEN }}
       - run: npm run preview
       - run: npm run sync:store
+        continue-on-error: true
         env:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          TMDB_TOKEN: ${{ secrets.TMDB_TOKEN }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

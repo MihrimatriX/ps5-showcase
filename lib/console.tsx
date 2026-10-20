@@ -4,8 +4,13 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { t as translate, type Key } from "./i18n";
 import { rumble } from "./input";
 import { sound } from "./sound";
-import { projects } from "@/content/portfolio";
+import { movies, projects } from "@/content/portfolio";
 import type { L, Lang, Project, Tier } from "./types";
+
+/** The two things the console sells and keeps: games (Games tab) and movies (Movies tab). */
+export type Shelf = "games" | "movies";
+export const catalogs: Record<Shelf, Project[]> = { games: projects, movies };
+export const shelfOf = (p: Project): Shelf => (p.kind === "movie" ? "movies" : "games");
 
 export type Theme = "cosmic" | "aurora" | "ember" | "mono";
 export type User = "owner" | "guest" | "recruiter";
@@ -287,8 +292,8 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       extras,
       buy: (p) => {
         setBought((b) => (b.includes(p.id) ? b : [...b, p.id]));
-        // A game from the live search isn't in the catalog: keep its data so it stays in the library.
-        if (!projects.some((x) => x.id === p.id)) setExtras((x) => (x.some((y) => y.id === p.id) ? x : [...x, p]));
+        // A game or movie from the live search isn't in the catalog: keep its data so it stays in the library.
+        if (!catalogs[shelfOf(p)].some((x) => x.id === p.id)) setExtras((x) => (x.some((y) => y.id === p.id) ? x : [...x, p]));
         award("shopper");
       },
       owns: (p) => p.owned !== false || bought.includes(p.id),
@@ -320,29 +325,31 @@ export function useNotifications() {
   }, [earned, seenAt, clearedAt]);
 }
 
-/** Games the visitor owns: latest purchases first (like the console's recently added), then the starting library. */
-export function useLibrary() {
+/** Games (or movies) the visitor owns: latest purchases first (like the console's recently added), then the starting library. */
+export function useLibrary(shelf: Shelf = "games") {
   const { bought, extras } = useConsole();
   return useMemo(() => {
-    const find = (id: string) => projects.find((p) => p.id === id && p.owned === false) ?? extras.find((p) => p.id === id);
+    const catalog = catalogs[shelf];
+    const find = (id: string) => catalog.find((p) => p.id === id && p.owned === false) ?? extras.find((p) => p.id === id && shelfOf(p) === shelf);
     const recent = [...bought].reverse().flatMap((id) => find(id) ?? []);
-    return [...recent, ...projects.filter((p) => p.owned !== false)];
-  }, [bought, extras]);
+    return [...recent, ...catalog.filter((p) => p.owned !== false)];
+  }, [bought, extras, shelf]);
 }
 
 /**
- * Where there is no server (the GitHub Pages build), the store is a snapshot of IGDB the deploy downloads
- * (scripts/sync-store.mjs). Its URL is baked in by scripts/build-preview.mjs; the Next app leaves it unset and asks /api/games.
+ * Where there is no server (the GitHub Pages build), each store is a snapshot the deploy downloads from IGDB or TMDB
+ * (scripts/sync-store.mjs) next to the page. scripts/build-preview.mjs turns this on; the Next app asks its API routes.
  */
-const STORE_JSON = process.env.STORE_JSON;
-let snapshot: Promise<Project[]> | undefined;
+const SNAPSHOTS = !!process.env.STORE_SNAPSHOTS;
+const snapshotFile: Record<Shelf, string> = { games: "store.json", movies: "movies.json" };
+const snapshots: Partial<Record<Shelf, Promise<Project[]>>> = {};
 
 /** Downloaded once and shared by every search; a failed download is retried by the next one. */
-function loadSnapshot(url: string) {
-  return (snapshot ??= fetch(url)
+function loadSnapshot(shelf: Shelf) {
+  return (snapshots[shelf] ??= fetch(snapshotFile[shelf])
     .then((r) => r.json() as Promise<Project[]>)
     .catch((e) => {
-      snapshot = undefined;
+      delete snapshots[shelf];
       throw e;
     }));
 }
@@ -366,32 +373,34 @@ function matchGames(games: Project[], term: string): Project[] {
     .map(({ g }) => g);
 }
 
-async function searchStore(term: string, signal: AbortSignal): Promise<Project[]> {
-  if (STORE_JSON) return matchGames(await loadSnapshot(STORE_JSON), term);
-  const res = await fetch(`/api/games?q=${encodeURIComponent(term)}`, { signal });
-  return ((await res.json()) as { games: Project[] }).games;
+async function searchStore(shelf: Shelf, term: string, signal: AbortSignal): Promise<Project[]> {
+  if (SNAPSHOTS) return matchGames(await loadSnapshot(shelf), term);
+  // /api/games answers { games }, /api/movies { movies }.
+  const res = await fetch(`/api/${shelf}?q=${encodeURIComponent(term)}`, { signal });
+  return ((await res.json()) as Record<Shelf, Project[]>)[shelf];
 }
 
 /**
- * Store search beyond the synced catalog: IGDB through /api/games, or the snapshot above. Debounced; games already in
- * the catalog are left out. Comes back empty when neither is reachable (the preview opened as a file, IGDB down).
+ * Store search beyond the synced catalog: IGDB or TMDB through /api/games and /api/movies, or the snapshots above.
+ * Debounced; titles already in the catalog are left out. Comes back empty when neither is reachable (the preview
+ * opened as a file, the service down).
  */
-export function useStoreSearch(q: string) {
+export function useStoreSearch(q: string, shelf: Shelf = "games") {
   const term = q.trim();
   const [state, setState] = useState<{ games: Project[]; loading: boolean }>({ games: [], loading: false });
   // Start the snapshot download when a search box opens, so the first results don't wait for it.
   useEffect(() => {
-    if (STORE_JSON) loadSnapshot(STORE_JSON).catch(() => {});
-  }, []);
+    if (SNAPSHOTS) loadSnapshot(shelf).catch(() => {});
+  }, [shelf]);
   useEffect(() => {
     if (term.length < 2) return setState({ games: [], loading: false });
     setState((s) => ({ ...s, loading: true }));
     const ctrl = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const games = await searchStore(term, ctrl.signal);
+        const games = await searchStore(shelf, term, ctrl.signal);
         if (ctrl.signal.aborted) return;
-        const known = new Set(projects.map((p) => p.id));
+        const known = new Set(catalogs[shelf].map((p) => p.id));
         setState({ games: games.filter((g) => !known.has(g.id)), loading: false });
       } catch {
         if (!ctrl.signal.aborted) setState({ games: [], loading: false });
@@ -401,7 +410,7 @@ export function useStoreSearch(q: string) {
       clearTimeout(timer);
       ctrl.abort();
     };
-  }, [term]);
+  }, [term, shelf]);
   return state;
 }
 

@@ -5,7 +5,7 @@
  * the device's own keyboard is used instead.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { media, projects, socials } from "@/content/portfolio";
+import { media, movies, projects, socials } from "@/content/portfolio";
 import { useConsole, useStoreSearch } from "@/lib/console";
 import { pick } from "@/lib/i18n";
 import { useLayer, type TextInput } from "@/lib/input";
@@ -66,39 +66,42 @@ export function SearchScreen({
 
   const all: Result[] = useMemo(
     () => [
-      ...projects.map((p) => ({ key: `p-${p.id}`, title: p.title, sub: `${pick(lang, p.genre)} · ${p.tech.slice(0, 3).join(", ")}`, project: p, art: { src: p.cover, seed: p.id, motif: p.motif, palette: p.palette } })),
+      ...[...projects, ...movies].map((p) => ({ key: `p-${p.id}`, title: p.title, sub: `${pick(lang, p.genre)} · ${p.tech.slice(0, 3).join(", ")}`, project: p, art: { src: p.cover, seed: p.id, motif: p.motif, palette: p.palette } })),
       ...media.map((m) => ({ key: `m-${m.id}`, title: pick(lang, m.title), sub: `${t(`kind.${m.kind}`)} · ${pick(lang, m.summary)}`, art: { src: m.image, seed: m.id, motif: m.motif, palette: m.palette }, url: m.url, sample: m.sample })),
       ...socials.filter((s) => user === "recruiter" || s.id !== "cv").map((s) => ({ key: `s-${s.id}`, title: s.label, sub: s.handle, icon: s.id === "blog" ? "globe" : s.id, url: s.url, sample: s.sample })),
     ],
     [lang, t, user],
   );
 
-  // Games beyond the catalog, from IGDB; they open in the store page with a Buy button.
+  // Games and movies beyond the catalogs, from IGDB and TMDB; they open in the store page with a Buy button.
   const remote = useStoreSearch(q);
+  const remoteMovies = useStoreSearch(q, "movies");
   const rows: Row[] = useMemo(() => {
     const n = q.trim().toLocaleLowerCase(lang);
+    const isGame = (r: Result) => !!r.project && r.project.kind !== "movie";
+    const isMovie = (r: Result) => r.project?.kind === "movie";
+    const store = (list: Project[]) => list.map((p) => ({ key: `r-${p.id}`, title: p.title, sub: pick(lang, p.genre), project: p, art: { src: p.cover, seed: p.id, motif: p.motif, palette: p.palette } }));
     if (!n) {
       const recent = opened.map((id) => all.find((r) => r.project?.id === id)).filter(Boolean) as Result[];
       return [
-        ...(recent.length ? [{ id: "recent", title: x("Son oynananlar", "Recently played"), items: recent }] : []),
-        { id: "games", title: t("tab.games"), items: all.filter((r) => r.project) },
+        ...(recent.length ? [{ id: "recent", title: x("Son açılanlar", "Recently opened"), items: recent }] : []),
+        { id: "games", title: t("tab.games"), items: all.filter(isGame) },
+        { id: "movies", title: t("tab.movies"), items: all.filter(isMovie) },
         { id: "media", title: t("tab.media"), items: all.filter((r) => !r.project) },
-      ];
+      ].filter((r) => r.items.length);
     }
-    // Title, genre, tags and the developer ("Insomniac" finds Spider-Man 2).
+    // Title, genre, tags and the developer or director ("Insomniac" finds Spider-Man 2, "Nolan" finds Inception).
     const hit = (r: Result) => `${r.title} ${r.sub} ${r.project ? pick(lang, r.project.role) : ""}`.toLocaleLowerCase(lang).includes(n) || !!r.project?.tech.some((x) => x.toLocaleLowerCase(lang).includes(n));
     const found = all.filter(hit);
     return [
-      { id: "games", title: t("tab.games"), items: found.filter((r) => r.project) },
-      {
-        id: "store",
-        title: t("store"),
-        items: remote.games.map((p) => ({ key: `r-${p.id}`, title: p.title, sub: pick(lang, p.genre), project: p, art: { src: p.cover, seed: p.id, motif: p.motif, palette: p.palette } })),
-      },
+      { id: "games", title: t("tab.games"), items: found.filter(isGame) },
+      { id: "store", title: t("store"), items: store(remote.games) },
+      { id: "movies", title: t("tab.movies"), items: found.filter(isMovie) },
+      { id: "movie-store", title: t("store.movie"), items: store(remoteMovies.games) },
       { id: "media", title: x("Medya ve bağlantılar", "Media and links"), items: found.filter((r) => !r.project) },
     ].filter((r) => r.items.length);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, all, lang, opened, t, remote.games]);
+  }, [q, all, lang, opened, t, remote.games, remoteMovies.games]);
 
   // If the rows change under the focus (typing), keep the focus valid.
   useEffect(() => {
@@ -232,7 +235,7 @@ export function SearchScreen({
           <div className="search-empty">
             <Icon name="search" />
             <strong>{t("search.empty")}</strong>
-            <small className="muted">{x("Başka bir oyun adı, tür ya da stüdyo dene (ör. RPG, Racing, Insomniac).", "Try another game, genre or studio (e.g. RPG, Racing, Insomniac).")}</small>
+            <small className="muted">{x("Başka bir oyun ya da film adı, tür, stüdyo veya yönetmen dene (ör. RPG, Insomniac, Nolan).", "Try another game or movie, genre, studio or director (e.g. RPG, Insomniac, Nolan).")}</small>
           </div>
         )}
         {rows.map((row, r) => (

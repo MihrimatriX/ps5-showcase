@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { githubUser, repos } from "@/content/github";
 import { achievements, profile, projects } from "@/content/portfolio";
-import { consoleTrophies, useConsole, useLibrary, useStoreSearch } from "@/lib/console";
-import { pick } from "@/lib/i18n";
+import { catalogs, consoleTrophies, useConsole, useLibrary, useStoreSearch, type Shelf } from "@/lib/console";
+import { forMovie, pick, type Key } from "@/lib/i18n";
 import { rumble, useLayer, type Action } from "@/lib/input";
 import { navProps, useGrid, useScrollToFocus, type Pos } from "@/lib/nav";
 import { sound } from "@/lib/sound";
@@ -76,6 +76,8 @@ const tierOrder: Tier[] = ["platinum", "gold", "silver", "bronze"];
 
 export function GameHub({ project: p, onNav }: { project: Project; onNav: (n: PageNav) => void }) {
   const { t, lang, owns } = useConsole();
+  // A movie's page is the same hub with movie wording (Director, Cast, Open on TMDB).
+  const tm = (k: Key) => t(forMovie(k, p.kind === "movie"));
   const scrollRef = useRef<HTMLDivElement>(null);
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [checkout, setCheckout] = useState(false);
@@ -85,7 +87,7 @@ export function GameHub({ project: p, onNav }: { project: Project; onNav: (n: Pa
   if (!owns(p) && p.price) buttons.push({ label: `${t(p.status === "dev" ? "store.preorder" : "store.buy")} · ${formatPrice(p.price, lang)}`, icon: "bag", run: () => setCheckout(true) });
   // The trailer plays in the console; only games without a YouTube id fall back to the link.
   if (p.links.demo) buttons.push({ label: t("demo"), icon: "play", run: () => onNav(p.trailer ? { to: "video", id: p.trailer, title: p.title } : { to: "link", url: p.links.demo!, title: p.title, sample: p.sample }) });
-  if (p.links.repo) buttons.push({ label: t("source"), icon: "external", run: () => onNav({ to: "link", url: p.links.repo!, title: p.title, sample: p.sample }) });
+  if (p.links.repo) buttons.push({ label: tm("source"), icon: "external", run: () => onNav({ to: "link", url: p.links.repo!, title: p.title, sample: p.sample }) });
   if (p.trophies.length) buttons.push({ label: t("trophies"), icon: "trophy", run: () => grid.setPos({ r: 3, c: 0 }) });
   if (buttons[0]) buttons[0].primary = true;
 
@@ -161,7 +163,7 @@ export function GameHub({ project: p, onNav }: { project: Project; onNav: (n: Pa
       </section>
 
       <section className="page-section">
-        <SectionTitle>{t("activities")}</SectionTitle>
+        <SectionTitle>{tm("activities")}</SectionTitle>
         <div className="row-scroll" data-row-scroll>
           {p.features.map((f, i) => (
             <button key={i} className="activity" {...np(1, i)}>
@@ -181,7 +183,7 @@ export function GameHub({ project: p, onNav }: { project: Project; onNav: (n: Pa
           <p>{pick(lang, p.description)}</p>
           <dl className="facts">
             <div>
-              <dt>{t("role")}</dt>
+              <dt>{tm("role")}</dt>
               <dd>{pick(lang, p.role)}</dd>
             </div>
             <div>
@@ -202,7 +204,7 @@ export function GameHub({ project: p, onNav }: { project: Project; onNav: (n: Pa
             )}
           </dl>
           <div className="chips">
-            <span className="chips-label">{t("tech")}</span>
+            <span className="chips-label">{tm("tech")}</span>
             {p.tech.map((x) => (
               <span key={x} className="chip">
                 {x}
@@ -685,11 +687,12 @@ function useColumns() {
   return cols;
 }
 
-export function LibraryPage({ onNav }: { onNav: (n: PageNav) => void }) {
+export function LibraryPage({ shelf, onNav }: { shelf: Shelf; onNav: (n: PageNav) => void }) {
   const { t, award } = useConsole();
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => award("librarian"), [award]);
-  const library = useLibrary();
+  const library = useLibrary(shelf);
+  const title = t(forMovie("library", shelf === "movies"));
   const [filter, setFilter] = useState<Filter>("all");
   // A status filter only shows when it narrows the list: no "Archived 0", no "Available" that equals "All".
   const filters: Filter[] = [
@@ -728,9 +731,9 @@ export function LibraryPage({ onNav }: { onNav: (n: PageNav) => void }) {
   const np = (r: number, c: number) => navProps(grid.pos, r, c, grid.focus, () => activate({ r, c }));
 
   return (
-    <PageShell className="library" scrollRef={scrollRef} onBack={() => (sound.back(), onNav({ to: "back" }))} bg={<AmbientBg dim />} title={t("library")}>
+    <PageShell className="library" scrollRef={scrollRef} onBack={() => (sound.back(), onNav({ to: "back" }))} bg={<AmbientBg dim />} title={title}>
       <section className="library-head">
-        <h1>{t("library")}</h1>
+        <h1>{title}</h1>
         <div className="filters">
           {filters.map((f, i) => (
             <button key={f} className={`filter ${filter === f ? "is-active" : ""}`} {...np(0, i)}>
@@ -762,8 +765,10 @@ export function LibraryPage({ onNav }: { onNav: (n: PageNav) => void }) {
 /** Case- and accent-insensitive text for matching search queries ("Ragnarok" finds "Ragnarök"). */
 const fold = (s: string) => s.toLocaleLowerCase("tr").normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
 
-export function StorePage({ onNav }: { onNav: (n: PageNav) => void }) {
-  const { t, lang, owns, award, reducedMotion } = useConsole();
+export function StorePage({ shelf, onNav }: { shelf: Shelf; onNav: (n: PageNav) => void }) {
+  const { t: tg, lang, owns, award, reducedMotion } = useConsole();
+  // The movie store is the same page with movie wording ("Movie Store", "Search movies", "Searching TMDB…").
+  const t = (k: Key) => tg(forMovie(k, shelf === "movies"));
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // "Curious" used to need the profile, which only the recruiter can open now; the store keeps platinum reachable.
@@ -772,7 +777,7 @@ export function StorePage({ onNav }: { onNav: (n: PageNav) => void }) {
   const [genre, setGenre] = useState<string | null>(null);
   const [slide, setSlide] = useState(0);
 
-  const forSale = projects.filter((p) => p.price);
+  const forSale = catalogs[shelf].filter((p) => p.price);
   // The showcase: the best-rated released games you don't own yet (the catalog is ordered by rating).
   const featured = forSale.filter((p) => !owns(p) && p.status !== "dev").slice(0, 5);
   const genres = useMemo(() => {
@@ -780,11 +785,11 @@ export function StorePage({ onNav }: { onNav: (n: PageNav) => void }) {
     forSale.forEach((p) => p.genre.en.split(" · ").forEach((g) => n.set(g, (n.get(g) ?? 0) + 1)));
     return [...n].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([g]) => g);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [shelf]);
   const query = fold(q.trim());
   const filtering = !!query || !!genre;
-  // The catalog first, then whatever IGDB finds beyond it (any PS5 or PS4 game).
-  const remote = useStoreSearch(q);
+  // The catalog first, then whatever IGDB or TMDB finds beyond it (any PS5 or PS4 game, any movie).
+  const remote = useStoreSearch(q, shelf);
   const results = [...forSale, ...remote.games].filter((p) => (!genre || p.genre.en.includes(genre)) && (!query || fold([p.title, p.genre.en, p.role.en, ...p.tech].join(" ")).includes(query) || remote.games.includes(p)));
   // Games for sale before the ones already in your library (sort is stable, so rating order holds).
   const top = forSale.filter((p) => p.status !== "dev").sort((a, b) => Number(owns(a)) - Number(owns(b)));

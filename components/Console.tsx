@@ -1,7 +1,7 @@
 "use client";
 /** The console itself: which screen is up, the overlays on top of it, and the transitions between them. */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ConsoleProvider, useConsole } from "@/lib/console";
+import { ConsoleProvider, useConsole, type Shelf } from "@/lib/console";
 import { InputProvider, activity, rumble } from "@/lib/input";
 import { sound } from "@/lib/sound";
 import type { Project } from "@/lib/types";
@@ -22,8 +22,8 @@ type Screen =
   | { name: "game"; project: Project }
   | { name: "profile" }
   | { name: "trophies" }
-  | { name: "library" }
-  | { name: "store" }
+  | { name: "library"; shelf: Shelf }
+  | { name: "store"; shelf: Shelf }
   | { name: "settings" }
   | { name: "search" };
 
@@ -161,12 +161,14 @@ function Console() {
         return launchGame(n.project);
       case "profile":
       case "trophies":
-      case "library":
-      case "store":
       case "settings":
       case "search":
         sound.select();
         return go({ name: n.to });
+      case "library":
+      case "store":
+        sound.select();
+        return go({ name: n.to, shelf: n.shelf });
       case "link":
         return openLink(n.url, n.title);
       case "video":
@@ -288,10 +290,10 @@ function Console() {
       view = <TrophiesPage onNav={onPageNav} />;
       break;
     case "library":
-      view = <LibraryPage onNav={onPageNav} />;
+      view = <LibraryPage shelf={screen.shelf} onNav={onPageNav} />;
       break;
     case "store":
-      view = <StorePage onNav={onPageNav} />;
+      view = <StorePage shelf={screen.shelf} onNav={onPageNav} />;
       break;
     case "settings":
       view = (

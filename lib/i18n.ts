@@ -123,6 +123,19 @@ const dict = {
   "store.close": { tr: "Kapat", en: "Close" },
   "store.noResults": { tr: "Bu aramayla eşleşen oyun yok", en: "No games match this search" },
   "store.done": { tr: "Kütüphanene eklendi", en: "Added to your library" },
+  // Movie wording: forMovie() picks "<key>.movie" over "<key>" for films.
+  "tab.movies": { tr: "Filmler", en: "Movies" },
+  "play.movie": { tr: "İzle", en: "Watch" },
+  "details.movie": { tr: "Film bilgisi", en: "Movie info" },
+  "source.movie": { tr: "TMDB'de aç", en: "Open on TMDB" },
+  "role.movie": { tr: "Yönetmen", en: "Director" },
+  "tech.movie": { tr: "Oyuncular", en: "Cast" },
+  "activities.movie": { tr: "Bilgiler", en: "Details" },
+  "library.movie": { tr: "Film Kütüphanesi", en: "Movie Library" },
+  "store.movie": { tr: "Film Mağazası", en: "Movie Store" },
+  "store.search.movie": { tr: "Mağazada film ara", en: "Search movies" },
+  "store.searching.movie": { tr: "TMDB'de aranıyor…", en: "Searching TMDB…" },
+  "store.noResults.movie": { tr: "Bu aramayla eşleşen film yok", en: "No movies match this search" },
   "profile.repos": { tr: "GitHub projeleri", en: "GitHub projects" },
   "profile.repoCount": { tr: "GitHub projesi", en: "GitHub projects" },
 } satisfies Record<string, L>;
@@ -132,6 +145,9 @@ export type Key = keyof typeof dict;
 export function t(lang: Lang, key: Key): string {
   return dict[key][lang];
 }
+
+/** The movie wording of a key where it has one ("play" → "Watch"), else the key itself. */
+export const forMovie = (key: Key, movie: boolean): Key => (movie && `${key}.movie` in dict ? (`${key}.movie` as Key) : key);
 
 export function pick(lang: Lang, value: L): string {
   return value[lang];

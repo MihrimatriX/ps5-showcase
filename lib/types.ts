@@ -26,6 +26,8 @@ export interface ProjectTrophy {
 
 export interface Project {
   id: string;
+  /** "movie" for films (Movies tab, from TMDB); missing means a game. */
+  kind?: "movie";
   title: string;
   tagline: L;
   genre: L;

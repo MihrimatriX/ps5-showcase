@@ -7,3 +7,4 @@ next-env.d.ts
 .env*.local
 screenshots
 preview/store.json
+preview/movies.json

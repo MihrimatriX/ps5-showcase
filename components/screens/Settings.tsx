@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { repos } from "@/content/github";
-import { achievements, media, projects } from "@/content/portfolio";
+import { achievements, media, movies, projects } from "@/content/portfolio";
 import { consoleTrophies, useConsole, useLibrary, useNotifications, useNowPlaying, type Theme } from "@/lib/console";
 import { pick } from "@/lib/i18n";
 import { rumble, useLayer, type Action } from "@/lib/input";
@@ -301,8 +301,10 @@ export function SettingsApp({ onExit, onSwitchUser, onCC }: { onExit: () => void
             { kind: "info", id: "version", label: x("Sistem yazılımı", "System software"), value: `${APP_VERSION} · ${x("Güncel", "Up to date")}` },
             { kind: "info", id: "browser", label: x("Tarayıcı", "Browser"), value: typeof navigator !== "undefined" ? browserName(navigator.userAgent) : "" },
             { kind: "info", id: "cpu", label: x("İşlemci çekirdeği", "CPU cores"), value: typeof navigator !== "undefined" ? `${navigator.hardwareConcurrency ?? "?"}` : "" },
-            { kind: "info", id: "content", label: x("İçerik", "Content"), value: x(`${projects.length} oyun · ${repos.length} GitHub projesi`, `${projects.length} games · ${repos.length} GitHub projects`) },
+            { kind: "info", id: "content", label: x("İçerik", "Content"), value: x(`${projects.length} oyun · ${movies.length} film · ${repos.length} GitHub projesi`, `${projects.length} games · ${movies.length} movies · ${repos.length} GitHub projects`) },
             { kind: "info", id: "data", label: x("Oyun verisi", "Game data"), value: "Powered by IGDB.com" },
+            // TMDB's terms ask for this notice wherever its data is shown.
+            { kind: "info", id: "movie-data", label: x("Film verisi", "Movie data"), value: x("TMDB API'sini kullanır; TMDB tarafından onaylanmamıştır", "Uses the TMDB API but is not endorsed or certified by TMDB") },
           ],
         },
         {
