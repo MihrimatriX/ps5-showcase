@@ -123,7 +123,9 @@ Sahip olunan oyunları değiştirmek için `scripts/sync-igdb.mjs` içindeki `TI
 
 **Canlı arama:** mağaza ve arama, katalogda olmayan oyunları `/api/games?q=` üzerinden IGDB'de arar (PS5 ve PS4; remake,
 remaster ve port'lar dahil). Bu rota sunucuda çalışır, anahtarlar tarayıcıya gitmez. Yayına alırken (ör. Vercel) `CLIENT_ID` ve
-`CLIENT_SECRET` ortam değişkenlerini orada da tanımla. Sunucusu olmayan `preview/index.html` yalnızca kataloğu arar.
+`CLIENT_SECRET` ortam değişkenlerini orada da tanımla. Sunucusu olmayan GitHub Pages sürümü ise IGDB'nin anlık görüntüsünde
+arar: `npm run sync:store` en çok puanlanan 3000 PS5/PS4 oyununu `preview/store.json`'a yazar; Pages workflow'u bunu her
+deploy'da ve her gün yeniler (repo'nun Actions secret'larına `CLIENT_ID` ve `CLIENT_SECRET` eklenmeli).
 IGDB erişimi ve oyun eşlemesi `lib/igdb.ts` içinde; senkron betiği ve rota aynı kodu kullanır.
 Arayüzde gösterilen veriler IGDB'den gelir ("Powered by IGDB.com", Ayarlar → Sistem).
 

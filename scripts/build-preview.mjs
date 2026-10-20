@@ -28,7 +28,8 @@ const result = await build({
   target: ["es2020"],
   outdir: "out-preview",
   write: false,
-  define: { "process.env.NODE_ENV": '"production"' },
+  // No server here, so the store searches preview/store.json (npm run sync:store) next to the page.
+  define: { "process.env.NODE_ENV": '"production"', "process.env.STORE_JSON": '"store.json"' },
   logLevel: "warning",
   logOverride: { "unsupported-directive": "silent" },
 });

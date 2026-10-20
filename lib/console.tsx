@@ -331,20 +331,66 @@ export function useLibrary() {
 }
 
 /**
- * Store search beyond the synced catalog, through /api/games (IGDB, on the server). Debounced; games already in the
- * catalog are left out. Comes back empty where there is no server (the single-file preview) or IGDB is unreachable.
+ * Where there is no server (the GitHub Pages build), the store is a snapshot of IGDB the deploy downloads
+ * (scripts/sync-store.mjs). Its URL is baked in by scripts/build-preview.mjs; the Next app leaves it unset and asks /api/games.
+ */
+const STORE_JSON = process.env.STORE_JSON;
+let snapshot: Promise<Project[]> | undefined;
+
+/** Downloaded once and shared by every search; a failed download is retried by the next one. */
+function loadSnapshot(url: string) {
+  return (snapshot ??= fetch(url)
+    .then((r) => r.json() as Promise<Project[]>)
+    .catch((e) => {
+      snapshot = undefined;
+      throw e;
+    }));
+}
+
+/** "Marvel's Spider-Man 2" → "marvelsspiderman2": case, accents, spaces and punctuation don't matter. */
+const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * Games in the snapshot whose title holds every typed word ("spiderman", "god war", "ragnarok"), at most 20.
+ * Titles that start with what was typed come first ("halo" → Halo Infinite), then the file's most-rated-first order.
+ */
+function matchGames(games: Project[], term: string): Project[] {
+  const words = term.split(/\s+/).map(fold).filter(Boolean);
+  if (!words.length) return [];
+  const whole = words.join("");
+  return games
+    .map((g) => ({ g, key: fold(g.title) }))
+    .filter(({ key }) => words.every((w) => key.includes(w)))
+    .sort((a, b) => Number(!a.key.startsWith(whole)) - Number(!b.key.startsWith(whole)))
+    .slice(0, 20)
+    .map(({ g }) => g);
+}
+
+async function searchStore(term: string, signal: AbortSignal): Promise<Project[]> {
+  if (STORE_JSON) return matchGames(await loadSnapshot(STORE_JSON), term);
+  const res = await fetch(`/api/games?q=${encodeURIComponent(term)}`, { signal });
+  return ((await res.json()) as { games: Project[] }).games;
+}
+
+/**
+ * Store search beyond the synced catalog: IGDB through /api/games, or the snapshot above. Debounced; games already in
+ * the catalog are left out. Comes back empty when neither is reachable (the preview opened as a file, IGDB down).
  */
 export function useStoreSearch(q: string) {
   const term = q.trim();
   const [state, setState] = useState<{ games: Project[]; loading: boolean }>({ games: [], loading: false });
+  // Start the snapshot download when a search box opens, so the first results don't wait for it.
+  useEffect(() => {
+    if (STORE_JSON) loadSnapshot(STORE_JSON).catch(() => {});
+  }, []);
   useEffect(() => {
     if (term.length < 2) return setState({ games: [], loading: false });
     setState((s) => ({ ...s, loading: true }));
     const ctrl = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/games?q=${encodeURIComponent(term)}`, { signal: ctrl.signal });
-        const { games } = (await res.json()) as { games: Project[] };
+        const games = await searchStore(term, ctrl.signal);
+        if (ctrl.signal.aborted) return;
         const known = new Set(projects.map((p) => p.id));
         setState({ games: games.filter((g) => !known.has(g.id)), loading: false });
       } catch {

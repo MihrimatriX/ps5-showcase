@@ -1,10 +1,13 @@
-# Publishes the single-file build (preview/index.html) to GitHub Pages. Pages has no server, so /api/games
-# (live IGDB store search) is unavailable there; the store falls back to the synced catalog.
+# Publishes the single-file build (preview/index.html) to GitHub Pages. Pages has no server for /api/games, so the
+# store searches a snapshot of IGDB (preview/store.json) taken here, refreshed daily. Needs the CLIENT_ID and
+# CLIENT_SECRET repository secrets (Settings → Secrets and variables → Actions).
 name: Pages
 
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "0 4 * * *"
   workflow_dispatch:
 
 permissions:
@@ -30,6 +33,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run preview
+      - run: npm run sync:store
+        env:
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
